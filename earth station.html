@@ -1,0 +1,3736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Earth Station — Premium Live Atmospheric Readout</title>
+<meta name="description" content="A cinematic rotating 3D Earth with live weather, air quality, day/night terminator, space weather, flights, and immersive audio. Tap anywhere to read conditions." />
+<meta name="theme-color" content="#04060b" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#04060b;
+    --deep:#0a1120;
+    --panel:#0c1424;
+    --cyan:#5eead4;
+    --cyan-dim:rgba(94,234,212,0.35);
+    --amber:#f5a94e;
+    --amber-dim:rgba(245,169,78,0.35);
+    --violet:#a78bfa;
+    --violet-dim:rgba(167,139,250,0.35);
+    --rose:#fb7185;
+    --rose-dim:rgba(251,113,133,0.35);
+    --ink:#e8edf6;
+    --mist:#7d8aa3;
+    --line:rgba(125,138,163,0.18);
+    --line-strong:rgba(125,138,163,0.3);
+    --radius:16px;
+    --radius-sm:10px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+    --accent:var(--cyan);
+    --accent-dim:var(--cyan-dim);
+    --glass:rgba(10,17,32,0.72);
+    --glass-strong:rgba(9,14,26,0.9);
+    --glow:0 0 30px rgba(94,234,212,0.12);
+    --shadow-card:0 8px 32px rgba(0,0,0,0.4);
+  }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html,body{ height:100%; }
+  body{
+    background:var(--void);
+    color:var(--ink);
+    font-family:var(--font-display);
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+    -webkit-font-smoothing:antialiased;
+    -moz-osx-font-smoothing:grayscale;
+    line-height:1.5;
+  }
+
+  /* ============================================================
+     ANIMATED BACKGROUND GRADIENT
+     ============================================================ */
+  #bg-gradient{
+    position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 38%, rgba(30,58,95,0.35), transparent 60%),
+      radial-gradient(ellipse 120% 100% at 50% 100%, rgba(8,12,22,0.9), var(--void) 70%);
+    pointer-events:none;
+    z-index:0;
+  }
+  #bg-gradient::before{
+    content:'';
+    position:absolute; inset:0;
+    background:
+      radial-gradient(circle at 20% 80%, rgba(94,234,212,0.06), transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(245,169,78,0.04), transparent 50%),
+      radial-gradient(circle at 50% 50%, rgba(167,139,250,0.03), transparent 60%);
+    animation:bgShift 20s ease-in-out infinite alternate;
+  }
+  @keyframes bgShift{
+    0%{ opacity:0.6; transform:scale(1); }
+    100%{ opacity:1; transform:scale(1.05); }
+  }
+
+  /* ============================================================
+     CANVAS
+     ============================================================ */
+  #canvas-container{
+    position:fixed; inset:0;
+    z-index:1;
+    cursor:grab;
+  }
+  #canvas-container.dragging{ cursor:grabbing; }
+  #canvas-container canvas{ display:block; touch-action:none; }
+
+  /* ============================================================
+     HUD CORNERS — animated
+     ============================================================ */
+  .hud-corner{
+    position:fixed;
+    width:30px; height:30px;
+    border:1.5px solid var(--accent-dim);
+    z-index:5;
+    pointer-events:none;
+    opacity:0.7;
+    transition:all 0.6s cubic-bezier(0.19,1,0.22,1);
+  }
+  .hud-corner.tl{ top:18px; left:18px; border-right:none; border-bottom:none; border-radius:4px 0 0 0; }
+  .hud-corner.tr{ top:18px; right:18px; border-left:none; border-bottom:none; border-radius:0 4px 0 0; }
+  .hud-corner.bl{ bottom:18px; left:18px; border-right:none; border-top:none; border-radius:0 0 0 4px; }
+  .hud-corner.br{ bottom:18px; right:18px; border-left:none; border-top:none; border-radius:0 0 4px 0; }
+  .hud-corner::after{
+    content:'';
+    position:absolute;
+    width:4px; height:4px;
+    background:var(--accent);
+    border-radius:50%;
+    opacity:0;
+    transition:opacity 0.3s;
+  }
+  .hud-corner.tl::after{ top:2px; left:2px; }
+  .hud-corner.tr::after{ top:2px; right:2px; }
+  .hud-corner.bl::after{ bottom:2px; left:2px; }
+  .hud-corner.br::after{ bottom:2px; right:2px; }
+  .hud-corner:hover::after{ opacity:1; }
+
+  /* ============================================================
+     TOP BAR — premium glass
+     ============================================================ */
+  .topbar{
+    position:fixed; top:0; left:0; right:0;
+    z-index:10;
+    display:flex; align-items:flex-start; justify-content:space-between;
+    padding:22px 36px 0 36px;
+    pointer-events:none;
+  }
+  .topbar > *{ pointer-events:auto; }
+
+  .brand{ display:flex; align-items:center; gap:12px; }
+  .brand-mark{
+    color:var(--amber);
+    font-size:22px;
+    line-height:1;
+    text-shadow:0 0 20px var(--amber-dim), 0 0 40px rgba(245,169,78,0.1);
+    transition:transform 0.6s cubic-bezier(0.19,1,0.22,1);
+  }
+  .brand:hover .brand-mark{ transform:rotate(90deg) scale(1.1); }
+  .brand-text{ display:flex; flex-direction:column; gap:2px; }
+  .brand-title{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:16px;
+    letter-spacing:0.2em;
+    color:var(--ink);
+    background:linear-gradient(135deg, var(--ink), var(--accent));
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+  .brand-sub{
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.1em;
+    color:var(--mist);
+    text-transform:uppercase;
+  }
+
+  .controls{ display:flex; align-items:flex-start; gap:8px; flex-wrap:wrap; }
+
+  /* ============================================================
+     SEARCH — premium
+     ============================================================ */
+  .search-wrap{ position:relative; width:260px; }
+  #searchInput{
+    width:100%;
+    background:var(--glass);
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:11px 38px 11px 16px;
+    color:var(--ink);
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    letter-spacing:0.02em;
+    outline:none;
+    backdrop-filter:blur(16px) saturate(1.2);
+    -webkit-backdrop-filter:blur(16px) saturate(1.2);
+    transition:border-color 0.3s, box-shadow 0.3s, background 0.3s;
+  }
+  #searchInput::placeholder{ color:var(--mist); }
+  #searchInput:focus{
+    border-color:var(--accent-dim);
+    box-shadow:0 0 0 3px rgba(94,234,212,0.08), var(--glow);
+    background:rgba(10,17,32,0.85);
+  }
+  .search-hint-key{
+    position:absolute; right:12px; top:50%; transform:translateY(-50%);
+    font-family:var(--font-mono); font-size:9.5px;
+    color:var(--mist);
+    border:1px solid var(--line);
+    padding:1px 6px; border-radius:5px;
+    pointer-events:none;
+    opacity:0.7;
+    transition:opacity 0.2s;
+  }
+  #searchInput:focus ~ .search-hint-key{ opacity:0; }
+
+  .search-results{
+    position:absolute; top:calc(100% + 8px); left:0; right:0;
+    background:rgba(10,16,30,0.96);
+    border:1px solid var(--line);
+    border-radius:12px;
+    overflow:hidden;
+    backdrop-filter:blur(20px) saturate(1.3);
+    -webkit-backdrop-filter:blur(20px) saturate(1.3);
+    max-height:320px; overflow-y:auto;
+    box-shadow:0 24px 60px rgba(0,0,0,0.6), 0 0 0 1px rgba(94,234,212,0.05);
+    z-index:30;
+    animation:dropIn 0.25s cubic-bezier(0.19,1,0.22,1);
+  }
+  @keyframes dropIn{ from{ opacity:0; transform:translateY(-8px); } to{ opacity:1; transform:translateY(0); } }
+  .search-results.hidden{ display:none; }
+  .search-result-item{
+    padding:11px 16px;
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--ink);
+    cursor:pointer;
+    border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; gap:8px;
+    transition:background 0.2s, padding-left 0.2s;
+  }
+  .search-result-item:last-child{ border-bottom:none; }
+  .search-result-item:hover, .search-result-item.highlighted{
+    background:rgba(94,234,212,0.08);
+    padding-left:20px;
+  }
+  .search-result-item .sr-country{
+    color:var(--mist);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:55%; text-align:right;
+  }
+  .search-result-empty{
+    padding:14px 16px; font-family:var(--font-mono); font-size:12px; color:var(--mist);
+  }
+  .search-section-label{
+    padding:10px 16px 4px 16px;
+    font-family:var(--font-mono); font-size:9px;
+    letter-spacing:0.18em; text-transform:uppercase;
+    color:var(--mist); opacity:0.6;
+  }
+  .recent-chip-row{
+    display:flex; flex-wrap:wrap; gap:6px;
+    padding:6px 16px 14px 16px;
+  }
+  .recent-chip{
+    font-family:var(--font-mono); font-size:10px;
+    padding:5px 11px; border-radius:20px;
+    border:1px solid var(--line);
+    color:var(--mist);
+    background:rgba(255,255,255,0.02);
+    cursor:pointer;
+    transition:border-color 0.2s, color 0.2s, background 0.2s, transform 0.15s;
+  }
+  .recent-chip:hover{
+    color:var(--ink); border-color:var(--accent-dim);
+    background:rgba(94,234,212,0.06);
+    transform:translateY(-1px);
+  }
+
+  /* ============================================================
+     ICON BUTTONS — premium
+     ============================================================ */
+  .icon-btn{
+    width:38px; height:38px;
+    display:flex; align-items:center; justify-content:center;
+    background:var(--glass);
+    border:1px solid var(--line);
+    border-radius:11px;
+    color:var(--accent);
+    font-size:15px;
+    cursor:pointer;
+    backdrop-filter:blur(16px) saturate(1.2);
+    -webkit-backdrop-filter:blur(16px) saturate(1.2);
+    transition:border-color 0.25s, color 0.25s, transform 0.15s, background 0.25s, box-shadow 0.25s;
+    position:relative;
+    overflow:hidden;
+  }
+  .icon-btn::after{
+    content:'';
+    position:absolute; inset:0;
+    background:radial-gradient(circle at center, var(--accent-dim), transparent 70%);
+    opacity:0; transition:opacity 0.3s;
+  }
+  .icon-btn:hover{
+    border-color:var(--accent-dim);
+    background:rgba(10,17,32,0.9);
+    box-shadow:var(--glow);
+  }
+  .icon-btn:hover::after{ opacity:0.3; }
+  .icon-btn:active{ transform:scale(0.93); }
+  .icon-btn.active{
+    color:var(--accent);
+    border-color:var(--accent-dim);
+    background:rgba(94,234,212,0.08);
+    box-shadow:var(--glow);
+  }
+  .icon-btn.paused{ color:var(--mist); }
+  .icon-btn.paused:hover{ color:var(--ink); }
+
+  /* ============================================================
+     THEME PICKER
+     ============================================================ */
+  .theme-picker{
+    display:flex; gap:6px; align-items:center; padding:0 4px; height:38px;
+  }
+  .theme-dot{
+    width:15px; height:15px; border-radius:50%;
+    cursor:pointer;
+    border:2px solid transparent;
+    transition:transform 0.2s cubic-bezier(0.19,1,0.22,1), border-color 0.2s, box-shadow 0.2s;
+    position:relative;
+  }
+  .theme-dot:hover{ transform:scale(1.25); box-shadow:0 0 12px currentColor; }
+  .theme-dot.active{ border-color:var(--ink); box-shadow:0 0 10px currentColor; }
+
+  /* ============================================================
+     HINT
+     ============================================================ */
+  .hint{
+    position:fixed; bottom:40px; left:50%;
+    transform:translateX(-50%);
+    z-index:6;
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.18em;
+    color:var(--mist);
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:12px;
+    transition:opacity 0.8s cubic-bezier(0.19,1,0.22,1);
+    pointer-events:none;
+    text-align:center;
+    white-space:nowrap;
+  }
+  .hint::before, .hint::after{
+    content:'';
+    width:28px; height:1px;
+    background:linear-gradient(90deg, transparent, var(--line));
+  }
+  .hint::after{ background:linear-gradient(90deg, var(--line), transparent); }
+  .hint.faded{ opacity:0; }
+
+  /* ============================================================
+     COORDINATE READOUT
+     ============================================================ */
+  .coord-readout{
+    position:fixed; left:36px; bottom:36px;
+    z-index:6;
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.1em;
+    color:var(--mist);
+    line-height:1.8;
+    pointer-events:none;
+    opacity:0.75;
+    transition:opacity 0.3s;
+  }
+  .coord-readout .cr-label{ color:var(--accent); opacity:0.9; }
+
+  /* ============================================================
+     TOAST — premium
+     ============================================================ */
+  #toastHost{
+    position:fixed; bottom:32px; right:32px;
+    z-index:100;
+    display:flex; flex-direction:column; gap:10px;
+    align-items:flex-end;
+    pointer-events:none;
+  }
+  .toast{
+    font-family:var(--font-mono); font-size:11.5px;
+    letter-spacing:0.03em;
+    padding:12px 20px;
+    border-radius:12px;
+    background:rgba(10,16,30,0.94);
+    border:1px solid var(--line-strong);
+    color:var(--ink);
+    backdrop-filter:blur(20px) saturate(1.3);
+    -webkit-backdrop-filter:blur(20px) saturate(1.3);
+    box-shadow:0 16px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(94,234,212,0.05);
+    animation:toastIn 0.4s cubic-bezier(0.19,1,0.22,1);
+    max-width:360px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .toast::before{
+    content:'◆';
+    font-size:8px;
+    opacity:0.6;
+    flex-shrink:0;
+  }
+  .toast.ok{ border-color:rgba(94,234,212,0.35); }
+  .toast.ok::before{ color:var(--cyan); }
+  .toast.warn{ border-color:rgba(245,169,78,0.4); }
+  .toast.warn::before{ color:var(--amber); }
+  .toast.err{ border-color:rgba(248,113,113,0.4); }
+  .toast.err::before{ color:var(--rose); }
+  .toast.fade{ animation:toastOut 0.4s ease forwards; }
+  @keyframes toastIn{ from{ opacity:0; transform:translateX(40px) scale(0.95); } to{ opacity:1; transform:translateX(0) scale(1); } }
+  @keyframes toastOut{ to{ opacity:0; transform:translateX(40px) scale(0.95); } }
+
+  /* ============================================================
+     LOADING SCREEN — cinematic
+     ============================================================ */
+  .loading{
+    position:fixed; inset:0; z-index:50;
+    background:var(--void);
+    display:flex; align-items:center; justify-content:center;
+    transition:opacity 0.8s cubic-bezier(0.19,1,0.22,1), visibility 0.8s;
+  }
+  .loading.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .loading-inner{ display:flex; flex-direction:column; align-items:center; gap:24px; width:240px; }
+  .loading-brand{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:14px;
+    letter-spacing:0.4em;
+    color:var(--ink);
+    opacity:0.9;
+    background:linear-gradient(135deg, var(--ink), var(--accent));
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+  .spinner{
+    width:38px; height:38px;
+    border-radius:50%;
+    border:2px solid var(--line);
+    border-top-color:var(--accent);
+    animation:spin 0.9s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .loading-text{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.2em;
+    color:var(--mist);
+    text-transform:uppercase;
+    text-align:center;
+  }
+  .loading-bar{
+    width:100%; height:2px;
+    background:rgba(255,255,255,0.06);
+    border-radius:2px;
+    overflow:hidden;
+    position:relative;
+  }
+  .loading-bar::after{
+    content:'';
+    position:absolute; top:0; left:0; height:100%;
+    width:40%;
+    background:linear-gradient(90deg, transparent, var(--accent), transparent);
+    animation:loadingSlide 1.6s ease-in-out infinite;
+  }
+  @keyframes loadingSlide{
+    0%{ transform:translateX(-100%); }
+    100%{ transform:translateX(350%); }
+  }
+
+  /* ============================================================
+     SIDE PANEL — premium glass
+     ============================================================ */
+  .panel{
+    position:fixed;
+    top:0; right:0;
+    width:430px; height:100%;
+    z-index:20;
+    background:rgba(9,14,26,0.85);
+    border-left:1px solid var(--line);
+    backdrop-filter:blur(28px) saturate(1.3);
+    -webkit-backdrop-filter:blur(28px) saturate(1.3);
+    transform:translateX(100%);
+    transition:transform 0.5s cubic-bezier(0.19,1,0.22,1);
+    overflow-y:auto;
+    scrollbar-width:thin;
+    scrollbar-color:var(--line) transparent;
+    box-shadow:-20px 0 60px rgba(0,0,0,0.4);
+  }
+  .panel::-webkit-scrollbar{ width:6px; }
+  .panel::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
+  .panel.visible{ transform:translateX(0); }
+
+  .panel-close{
+    position:absolute; top:20px; right:20px;
+    width:32px; height:32px;
+    border:1px solid var(--line);
+    border-radius:9px;
+    background:var(--glass);
+    color:var(--mist);
+    font-size:16px;
+    line-height:1;
+    cursor:pointer;
+    z-index:2;
+    transition:color 0.2s, border-color 0.2s, transform 0.15s, background 0.2s;
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .panel-close:hover{
+    color:var(--ink);
+    border-color:var(--accent-dim);
+    background:rgba(94,234,212,0.06);
+    transform:scale(1.05);
+  }
+
+  .panel-content{ padding:80px 28px 48px 28px; }
+
+  /* ============================================================
+     PANEL TYPOGRAPHY
+     ============================================================ */
+  .p-eyebrow{
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.22em;
+    color:var(--accent);
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:12px;
+  }
+  .p-eyebrow .dot{
+    width:6px; height:6px; border-radius:50%;
+    background:var(--accent);
+    box-shadow:0 0 10px var(--accent), 0 0 20px var(--accent-dim);
+    animation:pulseDot 2s ease-in-out infinite;
+  }
+  @keyframes pulseDot{ 0%,100%{ opacity:1; transform:scale(1); } 50%{ opacity:0.4; transform:scale(0.8); } }
+
+  .p-title{
+    font-family:var(--font-display);
+    font-weight:700;
+    font-size:24px;
+    line-height:1.2;
+    margin:0 0 8px 0;
+    padding-right:36px;
+    background:linear-gradient(135deg, var(--ink), var(--accent));
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+  .p-coords{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--mist);
+    letter-spacing:0.04em;
+  }
+
+  .p-divider{
+    height:1px;
+    background:linear-gradient(90deg, transparent, var(--line), transparent);
+    margin:24px 0;
+  }
+
+  .p-temp-row{ display:flex; align-items:flex-end; justify-content:space-between; gap:16px; }
+  .p-temp{
+    font-family:var(--font-mono);
+    font-weight:700;
+    font-size:56px;
+    line-height:1;
+    letter-spacing:-0.02em;
+    background:linear-gradient(135deg, var(--ink), var(--accent));
+    -webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;
+    background-clip:text;
+  }
+  .p-temp-unit{
+    font-size:24px;
+    color:var(--mist);
+    cursor:pointer;
+    user-select:none;
+    border-bottom:1px dashed var(--mist);
+    padding-bottom:2px;
+    transition:color 0.2s, border-color 0.2s;
+  }
+  .p-temp-unit:hover{ color:var(--ink); border-color:var(--accent); }
+  .p-cond{ text-align:right; }
+  .p-cond-icon{ font-size:34px; line-height:1; }
+  .p-cond-label{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--mist);
+    margin-top:6px;
+    max-width:130px;
+  }
+  .p-feels{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--mist);
+    margin-top:12px;
+    letter-spacing:0.02em;
+  }
+
+  /* ============================================================
+     STAT GRID
+     ============================================================ */
+  .stat-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:24px;
+  }
+  .stat-card{
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px 16px;
+    background:rgba(255,255,255,0.015);
+    transition:border-color 0.25s, background 0.25s, transform 0.2s, box-shadow 0.25s;
+  }
+  .stat-card:hover{
+    border-color:var(--accent-dim);
+    background:rgba(94,234,212,0.04);
+    transform:translateY(-2px);
+    box-shadow:var(--shadow-card);
+  }
+  .stat-label{
+    display:flex; align-items:center; gap:6px;
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.16em;
+    color:var(--mist);
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .stat-value{
+    font-family:var(--font-mono);
+    font-size:20px;
+    font-weight:700;
+  }
+
+  /* ============================================================
+     AQI BLOCK
+     ============================================================ */
+  .aqi-block{ margin-top:24px; }
+  .aqi-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:12px;
+    gap:12px;
+  }
+  .aqi-label{
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.16em;
+    color:var(--mist);
+    text-transform:uppercase;
+  }
+  .aqi-value-wrap{ display:flex; align-items:baseline; gap:8px; }
+  .aqi-value{ font-family:var(--font-mono); font-size:20px; font-weight:700; }
+  .aqi-tag{
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.05em;
+    padding:3px 10px;
+    border-radius:20px;
+    text-transform:uppercase;
+  }
+  .aqi-bar-track{
+    height:6px; border-radius:4px;
+    background:rgba(255,255,255,0.06);
+    overflow:hidden;
+  }
+  .aqi-bar-fill{
+    height:100%; border-radius:4px;
+    transition:width 0.8s cubic-bezier(0.19,1,0.22,1);
+  }
+
+  /* ============================================================
+     SECTION TITLES
+     ============================================================ */
+  .section-title{
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.18em;
+    color:var(--amber);
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:8px;
+    margin:26px 0 14px 0;
+  }
+  .section-title .stitch{
+    flex:1; height:1px;
+    background:linear-gradient(90deg, var(--line), transparent);
+  }
+
+  /* ============================================================
+     INFO LOADING
+     ============================================================ */
+  .info-loading{
+    display:flex; align-items:center; gap:12px;
+    padding:20px 2px;
+  }
+  .spinner.small{ width:18px; height:18px; border-width:1.5px; }
+
+  /* ============================================================
+     CITY HERO
+     ============================================================ */
+  .city-hero{
+    position:relative;
+    width:100%; height:160px;
+    border-radius:14px;
+    overflow:hidden;
+    border:1px solid var(--line);
+    background:linear-gradient(140deg, rgba(94,234,212,0.08), rgba(245,169,78,0.05));
+    transition:border-color 0.3s, box-shadow 0.3s;
+  }
+  .city-hero:hover{
+    border-color:var(--accent-dim);
+    box-shadow:var(--shadow-card);
+  }
+  .city-hero img{
+    width:100%; height:100%; object-fit:cover; display:block;
+    filter:saturate(1.05) contrast(1.02);
+    transition:transform 0.8s cubic-bezier(0.19,1,0.22,1);
+  }
+  .city-hero:hover img{ transform:scale(1.06); }
+  .city-hero-fallback{
+    width:100%; height:100%;
+    display:flex; align-items:center; justify-content:center;
+    font-size:38px; opacity:0.5;
+  }
+  .city-hero-caption{
+    position:absolute; left:0; right:0; bottom:0;
+    padding:10px 14px;
+    background:linear-gradient(to top, rgba(4,6,11,0.9), transparent);
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.08em;
+    color:var(--mist);
+  }
+
+  .city-extract{
+    font-family:var(--font-display);
+    font-size:13px;
+    line-height:1.7;
+    color:var(--ink);
+    opacity:0.92;
+    margin-top:4px;
+  }
+
+  .pop-card{
+    display:flex; align-items:center; justify-content:space-between;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px 18px;
+    background:rgba(255,255,255,0.015);
+    transition:border-color 0.25s, background 0.25s;
+  }
+  .pop-card:hover{
+    border-color:var(--accent-dim);
+    background:rgba(94,234,212,0.04);
+  }
+  .pop-label{
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.16em;
+    color:var(--mist);
+    text-transform:uppercase;
+  }
+  .pop-value{
+    font-family:var(--font-mono);
+    font-size:24px;
+    font-weight:700;
+    color:var(--accent);
+    margin-top:4px;
+  }
+  .pop-icon{ font-size:28px; opacity:0.6; }
+
+  /* ============================================================
+     POI / TRANSPORT LISTS
+     ============================================================ */
+  .poi-list, .transport-list{ display:flex; flex-direction:column; gap:8px; }
+
+  .poi-item{
+    display:flex; align-items:center; gap:14px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:10px 14px;
+    background:rgba(255,255,255,0.015);
+    text-decoration:none;
+    transition:border-color 0.25s, background 0.25s, transform 0.2s, box-shadow 0.25s;
+  }
+  .poi-item:hover{
+    border-color:var(--accent-dim);
+    background:rgba(94,234,212,0.05);
+    transform:translateX(3px);
+    box-shadow:var(--shadow-card);
+  }
+  .poi-thumb-fallback{
+    width:44px; height:44px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(255,255,255,0.04);
+    font-size:18px;
+  }
+  .poi-info{ flex:1; min-width:0; }
+  .poi-name{
+    font-family:var(--font-display);
+    font-size:13px; font-weight:500;
+    color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .poi-dist{
+    font-family:var(--font-mono);
+    font-size:10px;
+    color:var(--mist);
+    margin-top:3px;
+  }
+
+  .transport-item{
+    display:flex; align-items:center; gap:14px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px 16px;
+    background:rgba(255,255,255,0.015);
+    transition:border-color 0.25s, background 0.25s;
+  }
+  .transport-item:hover{
+    border-color:var(--amber-dim);
+    background:rgba(245,169,78,0.04);
+  }
+  .transport-icon{
+    width:38px; height:38px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(245,169,78,0.1);
+    font-size:17px;
+  }
+  .transport-info{ flex:1; min-width:0; }
+  .transport-type{
+    font-family:var(--font-mono);
+    font-size:9px; letter-spacing:0.12em;
+    color:var(--amber); text-transform:uppercase;
+  }
+  .transport-name{
+    font-family:var(--font-display);
+    font-size:13px; font-weight:500; color:var(--ink);
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    margin-top:3px;
+  }
+  .transport-dist{
+    font-family:var(--font-mono);
+    font-size:11px; color:var(--mist);
+    flex-shrink:0;
+  }
+
+  .info-empty{
+    font-family:var(--font-mono);
+    font-size:11px; color:var(--mist);
+    padding:8px 2px;
+    line-height:1.7;
+  }
+
+  .wiki-link{
+    display:inline-flex; align-items:center; gap:8px;
+    margin-top:16px;
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.05em;
+    color:var(--accent);
+    text-decoration:none;
+    border-bottom:1px dashed var(--accent-dim);
+    padding-bottom:3px;
+    transition:border-color 0.2s, color 0.2s;
+  }
+  .wiki-link:hover{ border-color:var(--accent); color:var(--ink); }
+
+  /* ============================================================
+     TABS
+     ============================================================ */
+  .panel-tabs{
+    display:flex; gap:2px;
+    overflow-x:auto;
+    margin:22px 0 4px 0;
+    border-bottom:1px solid var(--line);
+    scrollbar-width:none;
+    position:relative;
+  }
+  .panel-tabs::-webkit-scrollbar{ display:none; }
+  .panel-tab-btn{
+    flex:0 0 auto;
+    padding:10px 13px 11px 13px;
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    color:var(--mist);
+    background:transparent;
+    border:none;
+    border-bottom:2px solid transparent;
+    cursor:pointer;
+    white-space:nowrap;
+    transition:color 0.2s, border-color 0.2s, background 0.2s;
+    position:relative;
+  }
+  .panel-tab-btn:hover{ color:var(--ink); background:rgba(255,255,255,0.02); }
+  .panel-tab-btn.active{
+    color:var(--accent);
+    border-bottom-color:var(--accent);
+  }
+  .panel-tab-btn.active::after{
+    content:'';
+    position:absolute;
+    bottom:-1px; left:0; right:0;
+    height:1px;
+    background:var(--accent);
+    box-shadow:0 0 12px var(--accent);
+  }
+
+  .tab-panel{ display:none; padding-top:18px; }
+  .tab-panel.active{ display:block; animation:tabIn 0.35s cubic-bezier(0.19,1,0.22,1); }
+  @keyframes tabIn{
+    from{ opacity:0; transform:translateY(6px); }
+    to{ opacity:1; transform:none; }
+  }
+
+  /* ============================================================
+     HOURLY STRIP
+     ============================================================ */
+  .hourly-scroll{
+    display:flex; gap:8px;
+    overflow-x:auto;
+    padding-bottom:10px;
+    margin-bottom:4px;
+    scrollbar-width:thin;
+    scrollbar-color:var(--line) transparent;
+  }
+  .hourly-scroll::-webkit-scrollbar{ height:5px; }
+  .hourly-scroll::-webkit-scrollbar-thumb{ background:var(--line); border-radius:3px; }
+  .hourly-item{
+    flex:0 0 auto; width:60px;
+    display:flex; flex-direction:column; align-items:center; gap:6px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:12px 4px;
+    background:rgba(255,255,255,0.015);
+    transition:border-color 0.25s, background 0.25s, transform 0.2s;
+  }
+  .hourly-item:hover{
+    border-color:var(--accent-dim);
+    transform:translateY(-2px);
+  }
+  .hourly-item.is-now{
+    border-color:var(--accent-dim);
+    background:rgba(94,234,212,0.06);
+    box-shadow:0 0 20px rgba(94,234,212,0.08);
+  }
+  .hourly-time{ font-family:var(--font-mono); font-size:9px; color:var(--mist); }
+  .hourly-icon{ font-size:18px; }
+  .hourly-temp{ font-family:var(--font-mono); font-size:13px; font-weight:700; color:var(--ink); }
+  .hourly-rain{ font-family:var(--font-mono); font-size:8.5px; color:var(--accent); }
+
+  /* ============================================================
+     DAILY LIST
+     ============================================================ */
+  .daily-row{
+    display:flex; align-items:center; gap:10px;
+    padding:10px 2px;
+    border-bottom:1px solid var(--line);
+    transition:background 0.2s;
+  }
+  .daily-row:hover{ background:rgba(255,255,255,0.015); }
+  .daily-row:last-child{ border-bottom:none; }
+  .daily-day{ width:68px; flex-shrink:0; font-family:var(--font-mono); font-size:11px; color:var(--mist); }
+  .daily-icon{ font-size:16px; width:24px; text-align:center; flex-shrink:0; }
+  .daily-rain{ width:40px; flex-shrink:0; font-family:var(--font-mono); font-size:10px; color:var(--accent); text-align:right; }
+  .daily-temps{ flex:1; display:flex; align-items:center; gap:8px; min-width:0; }
+  .daily-min{ font-family:var(--font-mono); font-size:11px; color:var(--mist); width:28px; text-align:right; }
+  .daily-bar-track{ flex:1; height:4px; border-radius:2px; background:rgba(255,255,255,0.06); position:relative; }
+  .daily-bar-fill{
+    position:absolute; top:0; height:100%; border-radius:2px;
+    background:linear-gradient(90deg, var(--cyan), var(--amber));
+    transition:width 0.6s cubic-bezier(0.19,1,0.22,1);
+  }
+  .daily-max{ font-family:var(--font-mono); font-size:11px; font-weight:700; color:var(--ink); width:28px; }
+
+  /* ============================================================
+     SUN & MOON CARDS
+     ============================================================ */
+  .sunmoon-grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .sunmoon-card{
+    border:1px solid var(--line); border-radius:12px;
+    padding:16px; text-align:center;
+    background:rgba(255,255,255,0.015);
+    transition:border-color 0.25s, background 0.25s, transform 0.2s;
+  }
+  .sunmoon-card:hover{
+    border-color:var(--amber-dim);
+    background:rgba(245,169,78,0.04);
+    transform:translateY(-2px);
+  }
+  .sunmoon-icon{ font-size:24px; }
+  .sunmoon-label{ font-family:var(--font-mono); font-size:9px; letter-spacing:0.12em; color:var(--mist); text-transform:uppercase; margin-top:8px; }
+  .sunmoon-value{ font-family:var(--font-mono); font-size:13px; font-weight:700; color:var(--ink); margin-top:3px; }
+
+  /* ============================================================
+     SPARKLINE CHART
+     ============================================================ */
+  .chart-wrap{
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px 14px 8px 14px;
+    background:rgba(255,255,255,0.015);
+    margin-top:4px;
+    overflow:hidden;
+    transition:border-color 0.25s;
+  }
+  .chart-wrap:hover{ border-color:var(--accent-dim); }
+  .chart-title{
+    font-family:var(--font-mono); font-size:9.5px;
+    letter-spacing:0.14em; color:var(--mist);
+    text-transform:uppercase;
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:8px;
+  }
+  .chart-title strong{ color:var(--accent); font-weight:700; }
+  .chart-svg{ display:block; width:100%; height:80px; }
+  .chart-legend{
+    display:flex; justify-content:space-between;
+    font-family:var(--font-mono); font-size:9px; color:var(--mist);
+    margin-top:4px;
+  }
+
+  /* ============================================================
+     SUN ARC
+     ============================================================ */
+  .sun-arc-wrap{
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:16px;
+    background:linear-gradient(180deg, rgba(245,169,78,0.05), rgba(94,234,212,0.03));
+    transition:border-color 0.25s;
+  }
+  .sun-arc-wrap:hover{ border-color:var(--amber-dim); }
+  .sun-arc-svg{ display:block; width:100%; height:80px; }
+  .sun-arc-times{
+    display:flex; justify-content:space-between;
+    font-family:var(--font-mono); font-size:10px; color:var(--mist);
+    margin-top:6px;
+  }
+  .sun-arc-times strong{ color:var(--ink); font-weight:700; }
+
+  /* ============================================================
+     WIND COMPASS
+     ============================================================ */
+  .compass-wrap{
+    display:flex; align-items:center; gap:16px;
+    border:1px solid var(--line);
+    border-radius:12px;
+    padding:14px 16px;
+    background:rgba(255,255,255,0.015);
+    margin-top:4px;
+    transition:border-color 0.25s;
+  }
+  .compass-wrap:hover{ border-color:var(--amber-dim); }
+  .compass-svg{ width:78px; height:78px; flex-shrink:0; }
+  .compass-info{ flex:1; }
+  .compass-value{ font-family:var(--font-mono); font-size:20px; font-weight:700; color:var(--ink); }
+  .compass-label{ font-family:var(--font-mono); font-size:10px; color:var(--mist); letter-spacing:0.1em; text-transform:uppercase; margin-top:5px; }
+  .compass-gust{ font-family:var(--font-mono); font-size:10.5px; color:var(--mist); margin-top:6px; }
+
+  /* ============================================================
+     SPACE WEATHER
+     ============================================================ */
+  .sw-row{
+    display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;
+    margin-top:8px;
+  }
+  .sw-card{
+    border:1px solid var(--line); border-radius:12px;
+    padding:12px 10px 14px 10px;
+    background:rgba(255,255,255,0.015);
+    text-align:center;
+    transition:border-color 0.25s, background 0.25s;
+  }
+  .sw-card:hover{ border-color:var(--accent-dim); background:rgba(94,234,212,0.04); }
+  .sw-label{ font-family:var(--font-mono); font-size:8.5px; letter-spacing:0.12em; color:var(--mist); text-transform:uppercase; }
+  .sw-value{ font-family:var(--font-mono); font-size:17px; font-weight:700; margin-top:5px; }
+  .kp-dot{
+    display:inline-block;
+    width:8px; height:8px; border-radius:50%;
+    margin-right:6px;
+    vertical-align:middle;
+    box-shadow:0 0 10px currentColor;
+  }
+
+  /* ============================================================
+     ISS ROW
+     ============================================================ */
+  .iss-row{
+    display:flex; align-items:center; gap:14px;
+    border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin-top:8px;
+    background:rgba(94,234,212,0.04);
+    transition:border-color 0.25s, background 0.25s;
+  }
+  .iss-row:hover{ border-color:var(--accent-dim); background:rgba(94,234,212,0.06); }
+  .iss-icon{ font-size:24px; }
+  .iss-info{ flex:1; min-width:0; }
+  .iss-title{ font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.12em; color:var(--accent); text-transform:uppercase; }
+  .iss-value{ font-family:var(--font-mono); font-size:12.5px; color:var(--ink); margin-top:4px; }
+  .iss-stats{ font-family:var(--font-mono); font-size:10px; color:var(--mist); margin-top:5px; }
+
+  /* ============================================================
+     CHIPS
+     ============================================================ */
+  .chip-scroll{ display:flex; gap:6px; overflow-x:auto; padding-bottom:12px; margin-bottom:4px; scrollbar-width:none; }
+  .chip-scroll::-webkit-scrollbar{ display:none; }
+  .chip{
+    flex:0 0 auto;
+    font-family:var(--font-mono); font-size:9.5px; letter-spacing:0.05em;
+    padding:7px 13px; border-radius:20px;
+    border:1px solid var(--line);
+    color:var(--mist);
+    background:rgba(255,255,255,0.02);
+    cursor:pointer;
+    transition:color 0.2s, border-color 0.2s, background 0.2s, transform 0.15s;
+  }
+  .chip:hover{ color:var(--ink); border-color:var(--accent-dim); background:rgba(94,234,212,0.06); transform:translateY(-1px); }
+  .chip.has-results{ color:var(--ink); border-color:var(--accent-dim); }
+
+  .category-block{ margin-bottom:20px; }
+  .category-heading{
+    font-family:var(--font-mono); font-size:10px; letter-spacing:0.1em;
+    text-transform:uppercase; color:var(--amber); margin-bottom:10px;
+  }
+
+  /* ============================================================
+     DATA ROWS
+     ============================================================ */
+  .data-list{ display:flex; flex-direction:column; }
+  .data-row{
+    display:flex; align-items:baseline; justify-content:space-between; gap:12px;
+    padding:10px 0;
+    border-bottom:1px solid var(--line);
+    transition:background 0.2s;
+  }
+  .data-row:hover{ background:rgba(255,255,255,0.01); }
+  .data-row:last-child{ border-bottom:none; }
+  .data-row-label{ font-family:var(--font-mono); font-size:10.5px; color:var(--mist); letter-spacing:0.04em; }
+  .data-row-value{ font-family:var(--font-mono); font-size:12.5px; color:var(--ink); font-weight:700; text-align:right; }
+
+  .note-card{
+    border:1px dashed var(--line);
+    border-radius:12px;
+    padding:14px 16px;
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    line-height:1.7;
+    color:var(--mist);
+    margin-top:8px;
+  }
+
+  .tip-card{
+    display:flex; gap:12px; align-items:flex-start;
+    border:1px solid var(--line); border-radius:12px;
+    padding:14px 16px; margin-bottom:8px;
+    background:rgba(245,169,78,0.04);
+    transition:border-color 0.25s, background 0.25s;
+  }
+  .tip-card:hover{ border-color:var(--amber-dim); background:rgba(245,169,78,0.06); }
+  .tip-icon{ font-size:18px; flex-shrink:0; }
+  .tip-text{ font-family:var(--font-display); font-size:12.5px; line-height:1.6; color:var(--ink); }
+
+  /* ============================================================
+     FAVORITES
+     ============================================================ */
+  .fav-btn{
+    position:absolute; top:20px; left:20px;
+    width:34px; height:34px; border-radius:50%;
+    border:1px solid var(--line);
+    background:rgba(10,14,22,0.6);
+    color:var(--mist);
+    font-size:16px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    transition:color 0.2s, border-color 0.2s, transform 0.2s, background 0.2s;
+    z-index:3;
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+  }
+  .fav-btn:hover{ transform:scale(1.1); color:var(--amber); border-color:var(--amber-dim); }
+  .fav-btn.active{ color:var(--amber); border-color:var(--amber); background:rgba(245,169,78,0.1); }
+
+  /* ============================================================
+     QUAKE / HOLIDAY
+     ============================================================ */
+  .quake-item, .holiday-item, .currency-item{
+    border:1px solid var(--line); border-radius:12px;
+    padding:12px 16px; margin-bottom:8px;
+    background:rgba(255,255,255,0.015);
+    transition:border-color 0.25s, background 0.25s;
+  }
+  .quake-item:hover, .holiday-item:hover{ border-color:var(--amber-dim); background:rgba(245,169,78,0.04); }
+  .quake-mag{ font-family:var(--font-mono); font-size:16px; font-weight:700; color:var(--amber); }
+  .quake-place{ font-family:var(--font-display); font-size:12.5px; color:var(--ink); margin-top:4px; }
+  .quake-time{ font-family:var(--font-mono); font-size:10px; color:var(--mist); margin-top:4px; }
+
+  /* ============================================================
+     ERROR / LOADING
+     ============================================================ */
+  .p-loading, .p-error{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:16px; padding:60px 10px;
+    text-align:center;
+  }
+  .p-error-text{
+    font-family:var(--font-mono); font-size:12px; color:var(--mist); line-height:1.7;
+  }
+
+  /* ============================================================
+     SOUNDSCAPE TOGGLE
+     ============================================================ */
+  .sound-toggle{
+    position:fixed; bottom:36px; right:36px;
+    z-index:7;
+    width:44px; height:44px;
+    border-radius:50%;
+    border:1px solid var(--line);
+    background:var(--glass);
+    color:var(--mist);
+    font-size:18px;
+    cursor:pointer;
+    display:flex; align-items:center; justify-content:center;
+    backdrop-filter:blur(16px) saturate(1.2);
+    -webkit-backdrop-filter:blur(16px) saturate(1.2);
+    transition:color 0.25s, border-color 0.25s, transform 0.2s, box-shadow 0.25s, background 0.25s;
+    box-shadow:var(--shadow-card);
+  }
+  .sound-toggle:hover{
+    color:var(--accent);
+    border-color:var(--accent-dim);
+    transform:scale(1.08);
+    box-shadow:var(--glow), var(--shadow-card);
+  }
+  .sound-toggle.active{
+    color:var(--accent);
+    border-color:var(--accent);
+    background:rgba(94,234,212,0.08);
+    box-shadow:var(--glow);
+  }
+  .sound-toggle .pulse-ring{
+    position:absolute; inset:-4px;
+    border-radius:50%;
+    border:1px solid var(--accent-dim);
+    opacity:0;
+    transition:opacity 0.3s;
+  }
+  .sound-toggle.active .pulse-ring{
+    opacity:1;
+    animation:pulseRing 2s ease-out infinite;
+  }
+  @keyframes pulseRing{
+    0%{ transform:scale(1); opacity:0.6; }
+    100%{ transform:scale(1.4); opacity:0; }
+  }
+
+  /* ============================================================
+     RESPONSIVE
+     ============================================================ */
+  @media (max-width:720px){
+    .topbar{ flex-direction:column; padding:16px 16px 0 16px; gap:12px; }
+    .controls{ width:100%; flex-wrap:wrap; }
+    .search-wrap{ flex:1; width:auto; min-width:180px; }
+    .brand{ align-self:flex-start; }
+    .hud-corner{ display:none; }
+    .panel{
+      top:auto; bottom:0; left:0; right:0;
+      width:100%; height:auto; max-height:80vh;
+      border-left:none; border-top:1px solid var(--line);
+      border-radius:22px 22px 0 0;
+      transform:translateY(100%);
+    }
+    .panel.visible{ transform:translateY(0); }
+    .panel-content{ padding:60px 20px 48px 20px; }
+    .hint{ bottom:24px; font-size:10px; text-align:center; padding:0 20px; white-space:normal; }
+    .coord-readout{ display:none; }
+    .theme-picker{ height:auto; }
+    #toastHost{ left:16px; right:16px; bottom:16px; align-items:stretch; }
+    .toast{ max-width:none; }
+    .sound-toggle{ bottom:20px; right:20px; width:40px; height:40px; font-size:16px; }
+    .stat-grid{ grid-template-columns:1fr 1fr; }
+    .sw-row{ grid-template-columns:1fr 1fr 1fr; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .spinner{ animation:none; }
+    .p-eyebrow .dot{ animation:none; }
+    .loading-bar::after{ animation:none; }
+    .sound-toggle.active .pulse-ring{ animation:none; }
+    #bg-gradient::before{ animation:none; }
+    *{ transition-duration:0.01ms !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="bg-gradient"></div>
+  <div id="canvas-container"></div>
+
+  <div class="hud-corner tl"></div>
+  <div class="hud-corner tr"></div>
+  <div class="hud-corner bl"></div>
+  <div class="hud-corner br"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◇</span>
+      <div class="brand-text">
+        <span class="brand-title">EARTH STATION</span>
+        <span class="brand-sub">live atmospheric readout</span>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="search-wrap">
+        <input id="searchInput" type="text" placeholder="Search a place…" autocomplete="off" spellcheck="false" />
+        <span class="search-hint-key">/</span>
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+      <button id="gridToggle" class="icon-btn" title="Toggle coordinate grid" aria-label="Toggle grid">⌗</button>
+      <button id="issToggle" class="icon-btn" title="Toggle ISS tracker" aria-label="Toggle ISS">🛰</button>
+      <button id="flightToggle" class="icon-btn" title="Toggle live flights" aria-label="Toggle flights">✈️</button>
+      <button id="rotateToggle" class="icon-btn" title="Pause rotation" aria-label="Toggle auto-rotation">⟳</button>
+      <div class="theme-picker" title="Accent color">
+        <span class="theme-dot active" data-accent="cyan" style="background:#5eead4;color:#5eead4"></span>
+        <span class="theme-dot" data-accent="amber" style="background:#f5a94e;color:#f5a94e"></span>
+        <span class="theme-dot" data-accent="violet" style="background:#a78bfa;color:#a78bfa"></span>
+        <span class="theme-dot" data-accent="rose" style="background:#fb7185;color:#fb7185"></span>
+      </div>
+    </div>
+  </header>
+
+  <div id="hint" class="hint">Tap anywhere on Earth to read conditions</div>
+
+  <div class="coord-readout" id="coordReadout">
+    <div><span class="cr-label">▸</span> <span id="crLat">0.00°N</span> · <span id="crLon">0.00°E</span></div>
+    <div><span class="cr-label">▸</span> <span id="crUtc">--:-- UTC</span> · <span id="crSub">subsolar --</span></div>
+  </div>
+
+  <div id="toastHost"></div>
+
+  <button id="soundToggle" class="sound-toggle" title="Toggle ambient soundscape" aria-label="Toggle sound">
+    🔇
+    <span class="pulse-ring"></span>
+  </button>
+
+  <div id="loading" class="loading">
+    <div class="loading-inner">
+      <div class="loading-brand">EARTH STATION</div>
+      <div class="spinner"></div>
+      <div class="loading-bar"></div>
+      <span class="loading-text" id="loadingText">Calibrating sensors…</span>
+    </div>
+  </div>
+
+  <aside id="panel" class="panel">
+    <button id="panelClose" class="panel-close" aria-label="Close">×</button>
+    <div id="panelContent" class="panel-content"></div>
+  </aside>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+/* ==========================================================================
+   EARTH STATION 2.0 — PREMIUM EDITION
+   Cinematic globe w/ day-night terminator, live weather, space weather,
+   ISS, flights, clouds, soundscapes, and a feature-rich side panel.
+   ========================================================================== */
+(function () {
+  'use strict';
+
+  /* --------------------------------------------------------------
+     Configuration
+     -------------------------------------------------------------- */
+  var EARTH_RADIUS = 5;
+  var ROTATE_SPEED = 0.0011;
+  var prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // High-quality textures
+  var TEXTURES = {
+    day:     'https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg',
+    night:   'https://unpkg.com/three-globe/example/img/earth-night.jpg',
+    topology:'https://unpkg.com/three-globe/example/img/earth-topology.png',
+    water:   'https://unpkg.com/three-globe/example/img/earth-water.png',
+    clouds:  'https://threejs.org/examples/textures/planets/earth_clouds_1024.png'
+  };
+
+  // RainViewer tile template for live precipitation (free, no key)
+  var RAINVIEWER_TILE = 'https://tilecache.rainviewer.com/v2/radar/{ts}/256/{z}/{x}/{y}/2/1_1.png';
+
+  var WEATHER_CODES = {
+    0: ['Clear sky', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'], 3: ['Overcast', '☁️'],
+    45: ['Fog', '🌫️'], 48: ['Rime fog', '🌫️'],
+    51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Dense drizzle', '🌧️'],
+    56: ['Freezing drizzle', '🌧️'], 57: ['Dense freezing drizzle', '🌧️'],
+    61: ['Slight rain', '🌦️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'],
+    66: ['Freezing rain', '🌧️'], 67: ['Heavy freezing rain', '🌨️'],
+    71: ['Slight snow', '🌨️'], 73: ['Snow', '🌨️'], 75: ['Heavy snow', '❄️'], 77: ['Snow grains', '❄️'],
+    80: ['Rain showers', '🌦️'], 81: ['Rain showers', '🌧️'], 82: ['Violent showers', '⛈️'],
+    85: ['Snow showers', '🌨️'], 86: ['Heavy snow showers', '❄️'],
+    95: ['Thunderstorm', '⛈️'], 96: ['Thunderstorm, hail', '⛈️'], 99: ['Severe thunderstorm', '⛈️']
+  };
+
+  var MOON_NAMES = ['New Moon','Waxing Crescent','First Quarter','Waxing Gibbous','Full Moon','Waning Gibbous','Last Quarter','Waning Crescent'];
+  var MOON_ICONS = ['🌑','🌒','🌓','🌔','🌕','🌖','🌗','🌘'];
+
+  var THEMES = {
+    cyan:   { accent: '#5eead4', dim: 'rgba(94,234,212,0.35)',  rgb: '94,234,212' },
+    amber:  { accent: '#f5a94e', dim: 'rgba(245,169,78,0.35)',  rgb: '245,169,78' },
+    violet: { accent: '#a78bfa', dim: 'rgba(167,139,250,0.35)', rgb: '167,139,250' },
+    rose:   { accent: '#fb7185', dim: 'rgba(251,113,133,0.35)', rgb: '251,113,133' }
+  };
+
+  /* --------------------------------------------------------------
+     Scene setup
+     -------------------------------------------------------------- */
+  var container = document.getElementById('canvas-container');
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+  camera.position.set(0, 0, 13.5);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  var baseDPR = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(baseDPR);
+  container.appendChild(renderer.domElement);
+
+  var ambient = new THREE.AmbientLight(0x3a4a6b, 1.2);
+  scene.add(ambient);
+
+  /* --------------------------------------------------------------
+     Loading manager
+     -------------------------------------------------------------- */
+  var loadManager = new THREE.LoadingManager();
+  var loadingTextEl = document.getElementById('loadingText');
+  loadManager.onProgress = function (url) {
+    if (loadingTextEl) {
+      var name = url.split('/').pop().split('?')[0];
+      loadingTextEl.textContent = 'Loading ' + name.slice(0, 28) + '…';
+    }
+  };
+  loadManager.onLoad = function () {
+    var el = document.getElementById('loading');
+    el.classList.add('hidden');
+    setTimeout(function () { el.style.display = 'none'; }, 900);
+  };
+  var textureLoader = new THREE.TextureLoader(loadManager);
+  textureLoader.crossOrigin = 'anonymous';
+
+  /* --------------------------------------------------------------
+     Subsolar point (day/night terminator)
+     -------------------------------------------------------------- */
+  function getSubsolarPoint(date) {
+    var dayMs = 86400000;
+    var start = Date.UTC(date.getUTCFullYear(), 0, 0);
+    var dayOfYear = Math.floor((date.getTime() - start) / dayMs);
+    var hours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
+
+    var decl = -23.44 * Math.cos((2 * Math.PI / 365) * (dayOfYear + 10));
+    var B = (2 * Math.PI / 365) * (dayOfYear - 81);
+    var eot = 9.87 * Math.sin(2 * B) - 7.53 * Math.cos(B) - 1.5 * Math.sin(B);
+    var lon = -15 * (hours - 12 + eot / 60);
+    while (lon < -180) lon += 360;
+    while (lon > 180) lon -= 360;
+    return { lat: decl, lon: lon };
+  }
+
+  function latLonToVector3(lat, lon, radius) {
+    var phi = (90 - lat) * (Math.PI / 180);
+    var theta = (lon + 180) * (Math.PI / 180);
+    var x = -(radius * Math.sin(phi) * Math.cos(theta));
+    var z = radius * Math.sin(phi) * Math.sin(theta);
+    var y = radius * Math.cos(phi);
+    return new THREE.Vector3(x, y, z);
+  }
+
+  function vector3ToLatLon(v, radius) {
+    var phi = Math.acos(Math.max(-1, Math.min(1, v.y / radius)));
+    var theta = Math.atan2(v.z, -v.x);
+    var lat = 90 - (phi * 180 / Math.PI);
+    var lon = (theta * 180 / Math.PI) - 180;
+    if (lon < -180) lon += 360;
+    if (lon > 180) lon -= 360;
+    return { lat: lat, lon: lon };
+  }
+
+  function shortestAngleDiff(a, b) {
+    var diff = (b - a) % (Math.PI * 2);
+    if (diff > Math.PI) diff -= Math.PI * 2;
+    if (diff < -Math.PI) diff += Math.PI * 2;
+    return diff;
+  }
+  function frontRotationFor(localPoint) { return Math.atan2(-localPoint.x, localPoint.z); }
+
+  var sunDirection = new THREE.Vector3(1, 0, 0);
+  (function initSunDir() {
+    var sub = getSubsolarPoint(new Date());
+    sunDirection.copy(latLonToVector3(sub.lat, sub.lon, 1)).normalize();
+  })();
+
+  /* --------------------------------------------------------------
+     Fallback textures
+     -------------------------------------------------------------- */
+  function solidCanvasTexture(r, g, b, a) {
+    var canvas = document.createElement('canvas');
+    canvas.width = 4; canvas.height = 4;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = 'rgba(' + r + ',' + g + ',' + b + ',' + (a === undefined ? 1 : a) + ')';
+    ctx.fillRect(0, 0, 4, 4);
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  /* --------------------------------------------------------------
+     Earth — custom shader with day/night blend
+     -------------------------------------------------------------- */
+  var earthUniforms = {
+    dayTexture:   { value: solidCanvasTexture(10, 30, 60) },
+    nightTexture: { value: solidCanvasTexture(2, 4, 10) },
+    sunDirection: { value: sunDirection },
+    nightBoost:   { value: 1.0 },
+    dayBoost:     { value: 1.05 }
+  };
+
+  var earthVertexShader = [
+    'varying vec2 vUv;',
+    'varying vec3 vWorldNormal;',
+    'void main() {',
+    '  vUv = uv;',
+    '  vWorldNormal = normalize(mat3(modelMatrix) * normal);',
+    '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+    '}'
+  ].join('\n');
+
+  var earthFragmentShader = [
+    'uniform sampler2D dayTexture;',
+    'uniform sampler2D nightTexture;',
+    'uniform vec3 sunDirection;',
+    'uniform float nightBoost;',
+    'uniform float dayBoost;',
+    'varying vec2 vUv;',
+    'varying vec3 vWorldNormal;',
+    'void main() {',
+    '  vec3 dayCol = texture2D(dayTexture, vUv).rgb;',
+    '  vec3 nightCol = texture2D(nightTexture, vUv).rgb;',
+    '  float cosA = dot(normalize(vWorldNormal), normalize(sunDirection));',
+    '  float dayMix = smoothstep(-0.16, 0.22, cosA);',
+    '  vec3 dayLit = dayCol * dayBoost * (0.5 + 0.55 * smoothstep(0.0, 0.65, cosA));',
+    '  vec3 nightLit = nightCol * nightBoost;',
+    '  float twilight = exp(-pow((cosA - 0.0) * 5.0, 2.0));',
+    '  vec3 twilightTint = vec3(0.14, 0.08, 0.16);',
+    '  vec3 col = mix(nightLit, dayLit, dayMix) + twilight * twilightTint;',
+    '  gl_FragColor = vec4(col, 1.0);',
+    '}'
+  ].join('\n');
+
+  var earthMaterial = new THREE.ShaderMaterial({
+    uniforms: earthUniforms,
+    vertexShader: earthVertexShader,
+    fragmentShader: earthFragmentShader
+  });
+
+  textureLoader.load(TEXTURES.day, function (tex) {
+    earthUniforms.dayTexture.value = tex;
+  }, undefined, function () {});
+  textureLoader.load(TEXTURES.night, function (tex) {
+    tex.minFilter = THREE.LinearFilter;
+    earthUniforms.nightTexture.value = tex;
+  }, undefined, function () {});
+
+  var earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 128, 128);
+  var earth = new THREE.Mesh(earthGeometry, earthMaterial);
+  scene.add(earth);
+
+  /* --------------------------------------------------------------
+     Clouds — dynamic with real-time wind modulation
+     -------------------------------------------------------------- */
+  var cloudMaterial = new THREE.MeshPhongMaterial({
+    transparent: true,
+    opacity: 0.3,
+    depthWrite: false
+  });
+  textureLoader.load(TEXTURES.clouds, function (tex) {
+    cloudMaterial.map = tex;
+    cloudMaterial.needsUpdate = true;
+  }, undefined, function () {});
+  var clouds = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.012, 96, 96), cloudMaterial);
+  scene.add(clouds);
+
+  /* --------------------------------------------------------------
+     RainViewer precipitation overlay (live radar)
+     -------------------------------------------------------------- */
+  var precipGroup = new THREE.Group();
+  precipGroup.visible = false;
+  earth.add(precipGroup);
+  var precipMesh = null;
+  var rainviewerTimestamp = null;
+
+  function refreshRainViewer() {
+    // RainViewer free API: get latest timestamp
+    fetch('https://api.rainviewer.com/public/weather-maps.json')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (d && d.radar && d.radar.past && d.radar.past.length) {
+          rainviewerTimestamp = d.radar.past[d.radar.past.length - 1].time;
+        }
+      })
+      .catch(function () {});
+  }
+  refreshRainViewer();
+  setInterval(refreshRainViewer, 120000);
+
+  /* --------------------------------------------------------------
+     Atmosphere glow
+     -------------------------------------------------------------- */
+  var atmosphereMaterial = new THREE.ShaderMaterial({
+    vertexShader: [
+      'varying vec3 vNormal;',
+      'void main() {',
+      '  vNormal = normalize(normalMatrix * normal);',
+      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'varying vec3 vNormal;',
+      'void main() {',
+      '  float intensity = pow(0.62 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 3.2);',
+      '  gl_FragColor = vec4(0.36, 0.72, 0.95, 1.0) * intensity;',
+      '}'
+    ].join('\n'),
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide,
+    transparent: true,
+    depthWrite: false
+  });
+  var atmosphere = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.16, 64, 64), atmosphereMaterial);
+  scene.add(atmosphere);
+
+  /* --------------------------------------------------------------
+     Grid
+     -------------------------------------------------------------- */
+  var gridGroup = new THREE.Group();
+  gridGroup.visible = false;
+  earth.add(gridGroup);
+
+  (function buildGrid() {
+    var lineMat = new THREE.LineBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.18 });
+    var eqMat = new THREE.LineBasicMaterial({ color: 0xf5a94e, transparent: true, opacity: 0.35 });
+    var r = EARTH_RADIUS * 1.004;
+
+    for (var lat = -60; lat <= 60; lat += 30) {
+      var pts = [];
+      for (var lon = -180; lon <= 180; lon += 4) pts.push(latLonToVector3(lat, lon, r));
+      var geo = new THREE.BufferGeometry().setFromPoints(pts);
+      gridGroup.add(new THREE.Line(geo, lat === 0 ? eqMat : lineMat));
+    }
+    for (var lon2 = -180; lon2 < 180; lon2 += 30) {
+      var pts2 = [];
+      for (var la = -85; la <= 85; la += 3) pts2.push(latLonToVector3(la, lon2, r));
+      var geo2 = new THREE.BufferGeometry().setFromPoints(pts2);
+      gridGroup.add(new THREE.Line(geo2, lon2 === 0 ? eqMat : lineMat));
+    }
+  })();
+
+  /* --------------------------------------------------------------
+     Starfield
+     -------------------------------------------------------------- */
+  (function createStars() {
+    var isMobile = window.innerWidth < 720;
+    var count = isMobile ? 3500 : 7000;
+    var positions = new Float32Array(count * 3);
+    var colors = new Float32Array(count * 3);
+    for (var i = 0; i < count; i++) {
+      var r = 260 + Math.random() * 500;
+      var theta = Math.random() * Math.PI * 2;
+      var phi = Math.acos((Math.random() * 2) - 1);
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+      // Slight color variation for realism
+      var tint = 0.8 + Math.random() * 0.4;
+      colors[i * 3] = tint;
+      colors[i * 3 + 1] = tint * (0.9 + Math.random() * 0.2);
+      colors[i * 3 + 2] = 1.0;
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    var mat = new THREE.PointsMaterial({
+      size: 1.2, sizeAttenuation: true, transparent: true, opacity: 0.85,
+      vertexColors: true
+    });
+    scene.add(new THREE.Points(geo, mat));
+  })();
+
+  /* --------------------------------------------------------------
+     ISS marker
+     -------------------------------------------------------------- */
+  var issGroup = new THREE.Group();
+  issGroup.visible = false;
+  earth.add(issGroup);
+  var issCore = new THREE.Mesh(
+    new THREE.OctahedronGeometry(0.08, 0),
+    new THREE.MeshBasicMaterial({ color: 0xffd166 })
+  );
+  issGroup.add(issCore);
+  var issHalo = new THREE.Mesh(
+    new THREE.RingGeometry(0.14, 0.16, 32),
+    new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.55, side: THREE.DoubleSide })
+  );
+  issGroup.add(issHalo);
+  var issData = null;
+
+  /* --------------------------------------------------------------
+     Flight markers (OpenSky)
+     -------------------------------------------------------------- */
+  var flightGroup = new THREE.Group();
+  flightGroup.visible = false;
+  earth.add(flightGroup);
+  var flightMarkers = [];
+  var flightData = [];
+  var lastFlightFetch = 0;
+
+  function fetchFlights() {
+    if (Date.now() - lastFlightFetch < 15000) return;
+    lastFlightFetch = Date.now();
+    // OpenSky anonymous API — global state vectors (rate-limited)
+    fetch('https://opensky-network.org/api/states/all?extended=1')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || !d.states) return;
+        flightData = d.states.slice(0, 120).filter(function (s) {
+          return s[5] !== null && s[6] !== null && s[8] !== false;
+        });
+        renderFlightMarkers();
+      })
+      .catch(function () {});
+  }
+
+  function renderFlightMarkers() {
+    // Clear old markers
+    flightGroup.children.slice().forEach(function (m) {
+      flightGroup.remove(m);
+      if (m.geometry) m.geometry.dispose();
+      if (m.material) m.material.dispose();
+    });
+    flightMarkers = [];
+    flightData.forEach(function (s) {
+      var lat = s[6], lon = s[5];
+      if (lat === null || lon === null) return;
+      var pos = latLonToVector3(lat, lon, EARTH_RADIUS * 1.06);
+      var dot = new THREE.Mesh(
+        new THREE.SphereGeometry(0.035, 8, 8),
+        new THREE.MeshBasicMaterial({ color: 0xffd166, transparent: true, opacity: 0.8 })
+      );
+      dot.position.copy(pos);
+      flightGroup.add(dot);
+      flightMarkers.push(dot);
+    });
+  }
+
+  setInterval(function () {
+    if (flightGroup.visible && !state.paused) fetchFlights();
+  }, 15000);
+
+  /* --------------------------------------------------------------
+     OrbitControls
+     -------------------------------------------------------------- */
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 7.2;
+  controls.maxDistance = 26;
+  controls.enablePan = false;
+  controls.rotateSpeed = 0.55;
+
+  /* --------------------------------------------------------------
+     State
+     -------------------------------------------------------------- */
+  var state = {
+    autoRotate: !prefersReducedMotion,
+    panelOpen: false,
+    dragging: false,
+    rotationTarget: null,
+    markerGroup: null,
+    markerPlacedAt: 0,
+    unit: 'C',
+    currentLocation: null,
+    tabCache: {},
+    showGrid: false,
+    showISS: false,
+    showFlights: false,
+    lastFpsSample: performance.now(),
+    frameCount: 0,
+    currentDPR: baseDPR,
+    paused: false,
+    recentSearches: loadRecentSearches(),
+    soundOn: false
+  };
+
+  var clock = new THREE.Clock();
+
+  /* --------------------------------------------------------------
+     Marker
+     -------------------------------------------------------------- */
+  function clearMarker() {
+    if (state.markerGroup) {
+      earth.remove(state.markerGroup);
+      state.markerGroup.traverse(function (obj) {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+      state.markerGroup = null;
+    }
+  }
+
+  function placeMarker(localPoint) {
+    clearMarker();
+    var normal = localPoint.clone().normalize();
+    var group = new THREE.Group();
+    group.position.copy(normal.clone().multiplyScalar(EARTH_RADIUS * 1.006));
+    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+
+    var core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xf5a94e })
+    );
+    group.add(core);
+
+    var ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.15, 0.18, 48),
+      new THREE.MeshBasicMaterial({ color: 0xf5a94e, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    );
+    group.add(ring);
+    group.userData.ring = ring;
+
+    var staticRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.095, 0.105, 48),
+      new THREE.MeshBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+    );
+    group.add(staticRing);
+
+    var lineGeo = new THREE.BufferGeometry().setFromPoints([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(0, 0, 0.24)
+    ]);
+    var lineMat = new THREE.LineBasicMaterial({ color: 0xf5a94e, transparent: true, opacity: 0.5 });
+    group.add(new THREE.Line(lineGeo, lineMat));
+
+    earth.add(group);
+    state.markerGroup = group;
+    state.markerPlacedAt = clock.getElapsedTime();
+  }
+
+  function updateMarkerPulse() {
+    if (!state.markerGroup || prefersReducedMotion) return;
+    var t = (clock.getElapsedTime() - state.markerPlacedAt) % 1.6;
+    var progress = t / 1.6;
+    var scale = 1 + progress * 2.2;
+    var ring = state.markerGroup.userData.ring;
+    if (ring) {
+      ring.scale.set(scale, scale, scale);
+      ring.material.opacity = Math.max(0, 0.9 * (1 - progress));
+    }
+  }
+
+  /* --------------------------------------------------------------
+     Ambient Soundscape (Web Audio API — procedural)
+     -------------------------------------------------------------- */
+  var audioCtx = null;
+  var soundNodes = null;
+  var soundGain = null;
+
+  function initSoundscape() {
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    } catch (e) { return; }
+
+    // Master gain
+    soundGain = audioCtx.createGain();
+    soundGain.gain.value = 0;
+    soundGain.connect(audioCtx.destination);
+
+    // White noise buffer
+    var bufferSize = audioCtx.sampleRate * 2;
+    var buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+    var data = buffer.getChannelData(0);
+    for (var i = 0; i < bufferSize; i++) data[i] = Math.random() * 2 - 1;
+
+    // Rain noise
+    var rainSource = audioCtx.createBufferSource();
+    rainSource.buffer = buffer;
+    rainSource.loop = true;
+    var rainFilter = audioCtx.createBiquadFilter();
+    rainFilter.type = 'bandpass';
+    rainFilter.frequency.value = 2400;
+    rainFilter.Q.value = 0.6;
+    var rainGain = audioCtx.createGain();
+    rainGain.gain.value = 0.18;
+    rainSource.connect(rainFilter).connect(rainGain).connect(soundGain);
+    rainSource.start();
+
+    // Wind / rumble layer
+    var windSource = audioCtx.createBufferSource();
+    windSource.buffer = buffer;
+    windSource.loop = true;
+    var windFilter = audioCtx.createBiquadFilter();
+    windFilter.type = 'lowpass';
+    windFilter.frequency.value = 320;
+    var windGain = audioCtx.createGain();
+    windGain.gain.value = 0.08;
+    windSource.connect(windFilter).connect(windGain).connect(soundGain);
+    windSource.start();
+
+    // Gentle LFO for wind modulation
+    var lfo = audioCtx.createOscillator();
+    var lfoGain = audioCtx.createGain();
+    lfo.frequency.value = 0.15;
+    lfoGain.gain.value = 80;
+    lfo.connect(lfoGain).connect(windFilter.frequency);
+    lfo.start();
+
+    soundNodes = { rainSource: rainSource, windSource: windSource, rainFilter: rainFilter, windFilter: windFilter };
+  }
+
+  function toggleSoundscape() {
+    if (!audioCtx) initSoundscape();
+    if (!audioCtx) return;
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    state.soundOn = !state.soundOn;
+    var btn = document.getElementById('soundToggle');
+    if (state.soundOn) {
+      soundGain.gain.linearRampToValueAtTime(0.5, audioCtx.currentTime + 1.5);
+      btn.classList.add('active');
+      btn.textContent = '🔊';
+      btn.querySelector('.pulse-ring') || btn.insertAdjacentHTML('beforeend', '<span class="pulse-ring"></span>');
+      toast('Ambient soundscape on', 'ok', 1800);
+    } else {
+      soundGain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.8);
+      btn.classList.remove('active');
+      btn.textContent = '🔇';
+      toast('Ambient soundscape off', 'ok', 1400);
+    }
+  }
+
+  // Adjust rain intensity based on weather data
+  function syncSoundscapeToWeather(weatherData) {
+    if (!soundNodes || !state.soundOn) return;
+    var rain = weatherData && weatherData.current && weatherData.current.precipitation;
+    var target = 0.08;
+    if (rain !== null && rain !== undefined) {
+      target = Math.min(0.45, 0.08 + rain * 0.25);
+    }
+    soundNodes.rainGain = soundNodes.rainGain || { gain: { value: 0.18 } };
+    // We use the filter Q for subtle intensity changes
+    if (soundNodes.rainFilter) {
+      soundNodes.rainFilter.Q.value = 0.5 + target * 2;
+    }
+  }
+
+  /* --------------------------------------------------------------
+     Animation loop
+     -------------------------------------------------------------- */
+  function animate() {
+    requestAnimationFrame(animate);
+    if (state.paused) return;
+
+    var now = performance.now();
+    state.frameCount++;
+    if (now - state.lastFpsSample > 1500) {
+      var fps = state.frameCount / ((now - state.lastFpsSample) / 1000);
+      state.frameCount = 0;
+      state.lastFpsSample = now;
+      if (fps < 32 && state.currentDPR > 1) {
+        state.currentDPR = Math.max(1, state.currentDPR - 0.25);
+        renderer.setPixelRatio(state.currentDPR);
+      }
+    }
+
+    if (state.rotationTarget !== null) {
+      var diff = shortestAngleDiff(earth.rotation.y, state.rotationTarget);
+      if (Math.abs(diff) > 0.002) {
+        var step = diff * 0.06;
+        earth.rotation.y += step;
+        clouds.rotation.y += step * 1.15;
+        precipGroup.rotation.y += step;
+      } else {
+        earth.rotation.y = state.rotationTarget;
+        state.rotationTarget = null;
+      }
+    } else if (state.autoRotate && !state.panelOpen && !state.dragging) {
+      earth.rotation.y += ROTATE_SPEED;
+      clouds.rotation.y += ROTATE_SPEED * 1.15;
+      precipGroup.rotation.y += ROTATE_SPEED;
+    } else {
+      clouds.rotation.y += ROTATE_SPEED * 0.15;
+    }
+
+    // ISS animation
+    if (issGroup.visible) {
+      var issScale = 1 + 0.06 * Math.sin(clock.getElapsedTime() * 4);
+      issCore.scale.set(issScale, issScale, issScale);
+      issHalo.scale.set(issScale, issScale, issScale);
+      issHalo.material.opacity = 0.35 + 0.25 * Math.sin(clock.getElapsedTime() * 3);
+    }
+
+    // Flight marker subtle pulse
+    if (flightGroup.visible && !prefersReducedMotion) {
+      var pulse = 0.7 + 0.3 * Math.sin(clock.getElapsedTime() * 3);
+      flightMarkers.forEach(function (m) {
+        m.material.opacity = pulse;
+      });
+    }
+
+    updateMarkerPulse();
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  document.addEventListener('visibilitychange', function () {
+    state.paused = document.hidden;
+    if (!document.hidden) {
+      state.lastFpsSample = performance.now();
+      state.frameCount = 0;
+    }
+  });
+
+  animate();
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  /* --------------------------------------------------------------
+     Pointer interaction
+     -------------------------------------------------------------- */
+  var raycaster = new THREE.Raycaster();
+  var pointerVec = new THREE.Vector2();
+  var downPos = null;
+  var lastPointerMove = { x: 0, y: 0 };
+
+  renderer.domElement.addEventListener('pointerdown', function (e) {
+    downPos = { x: e.clientX, y: e.clientY };
+    state.dragging = false;
+  });
+
+  renderer.domElement.addEventListener('pointermove', function (e) {
+    lastPointerMove.x = e.clientX;
+    lastPointerMove.y = e.clientY;
+    if (downPos) {
+      var dx = e.clientX - downPos.x, dy = e.clientY - downPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 6) {
+        state.dragging = true;
+        container.classList.add('dragging');
+      }
+    }
+  });
+
+  window.addEventListener('pointerup', function (e) {
+    if (!downPos) return;
+    var dx = e.clientX - downPos.x, dy = e.clientY - downPos.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    downPos = null;
+    container.classList.remove('dragging');
+    if (dist < 6) handleTap(e.clientX, e.clientY);
+    setTimeout(function () { state.dragging = false; }, 50);
+  });
+
+  function handleTap(clientX, clientY) {
+    var rect = renderer.domElement.getBoundingClientRect();
+    pointerVec.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerVec.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerVec, camera);
+    var hits = raycaster.intersectObject(earth, false);
+    if (hits.length === 0) return;
+    var worldPoint = hits[0].point;
+    var localPoint = earth.worldToLocal(worldPoint.clone());
+    var geo = vector3ToLatLon(localPoint, EARTH_RADIUS);
+    placeMarker(localPoint);
+    hideHint();
+    fetchLocationData(geo.lat, geo.lon, null, null);
+  }
+
+  // Hover coordinate readout
+  renderer.domElement.addEventListener('pointermove', function () {
+    if (state.dragging) return;
+    var now = performance.now();
+    if (now - (handleTap._lastHover || 0) < 40) return;
+    handleTap._lastHover = now;
+
+    var rect = renderer.domElement.getBoundingClientRect();
+    pointerVec.x = ((lastPointerMove.x - rect.left) / rect.width) * 2 - 1;
+    pointerVec.y = -((lastPointerMove.y - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerVec, camera);
+    var hits = raycaster.intersectObject(earth, false);
+    if (hits.length) {
+      var local = earth.worldToLocal(hits[0].point.clone());
+      var geo = vector3ToLatLon(local, EARTH_RADIUS);
+      var latEl = document.getElementById('crLat');
+      var lonEl = document.getElementById('crLon');
+      if (latEl) latEl.textContent = Math.abs(geo.lat).toFixed(2) + '°' + (geo.lat >= 0 ? 'N' : 'S');
+      if (lonEl) lonEl.textContent = Math.abs(geo.lon).toFixed(2) + '°' + (geo.lon >= 0 ? 'E' : 'W');
+    }
+  });
+
+  /* --------------------------------------------------------------
+     UI Controls
+     -------------------------------------------------------------- */
+  function hideHint() {
+    var hint = document.getElementById('hint');
+    if (hint && !hint.classList.contains('faded')) hint.classList.add('faded');
+  }
+
+  var rotateBtn = document.getElementById('rotateToggle');
+  function syncRotateBtn() {
+    rotateBtn.textContent = state.autoRotate ? '⟳' : '⏸';
+    rotateBtn.classList.toggle('paused', !state.autoRotate);
+    rotateBtn.title = state.autoRotate ? 'Pause rotation' : 'Resume rotation';
+  }
+  syncRotateBtn();
+  rotateBtn.addEventListener('click', function () {
+    state.autoRotate = !state.autoRotate;
+    syncRotateBtn();
+    toast(state.autoRotate ? 'Rotation resumed' : 'Rotation paused', 'ok', 1400);
+  });
+
+  var gridToggleBtn = document.getElementById('gridToggle');
+  gridToggleBtn.addEventListener('click', function () {
+    state.showGrid = !state.showGrid;
+    gridGroup.visible = state.showGrid;
+    gridToggleBtn.classList.toggle('active', state.showGrid);
+    toast(state.showGrid ? 'Coordinate grid on' : 'Coordinate grid off', 'ok', 1200);
+  });
+
+  var issToggleBtn = document.getElementById('issToggle');
+  issToggleBtn.addEventListener('click', function () {
+    state.showISS = !state.showISS;
+    issGroup.visible = state.showISS;
+    issToggleBtn.classList.toggle('active', state.showISS);
+    if (state.showISS) {
+      fetchISS();
+      toast('ISS tracker on', 'ok', 1200);
+    } else {
+      toast('ISS tracker off', 'ok', 1200);
+    }
+  });
+
+  var flightToggleBtn = document.getElementById('flightToggle');
+  flightToggleBtn.addEventListener('click', function () {
+    state.showFlights = !state.showFlights;
+    flightGroup.visible = state.showFlights;
+    flightToggleBtn.classList.toggle('active', state.showFlights);
+    if (state.showFlights) {
+      fetchFlights();
+      toast('Live flight tracking on', 'ok', 1400);
+    } else {
+      toast('Flight tracking off', 'ok', 1200);
+    }
+  });
+
+  var soundBtn = document.getElementById('soundToggle');
+  soundBtn.addEventListener('click', toggleSoundscape);
+
+  // Theme picker
+  document.querySelectorAll('.theme-dot').forEach(function (dot) {
+    dot.addEventListener('click', function () {
+      var key = dot.getAttribute('data-accent');
+      applyTheme(key);
+      document.querySelectorAll('.theme-dot').forEach(function (d) { d.classList.remove('active'); });
+      dot.classList.add('active');
+      try { localStorage.setItem('earthStationAccent', key); } catch (e) {}
+    });
+  });
+
+  function applyTheme(key) {
+    var t = THEMES[key] || THEMES.cyan;
+    document.documentElement.style.setProperty('--accent', t.accent);
+    document.documentElement.style.setProperty('--accent-dim', t.dim);
+  }
+  try {
+    var savedTheme = localStorage.getItem('earthStationAccent');
+    if (savedTheme && THEMES[savedTheme]) {
+      applyTheme(savedTheme);
+      document.querySelectorAll('.theme-dot').forEach(function (d) {
+        d.classList.toggle('active', d.getAttribute('data-accent') === savedTheme);
+      });
+    }
+  } catch (e) {}
+
+  /* --------------------------------------------------------------
+     Toast
+     -------------------------------------------------------------- */
+  function toast(msg, kind, ttl) {
+    var host = document.getElementById('toastHost');
+    var el = document.createElement('div');
+    el.className = 'toast' + (kind ? ' ' + kind : '');
+    el.textContent = msg;
+    host.appendChild(el);
+    setTimeout(function () {
+      el.classList.add('fade');
+      setTimeout(function () { el.remove(); }, 450);
+    }, ttl || 2600);
+  }
+
+  /* --------------------------------------------------------------
+     Panel shell
+     -------------------------------------------------------------- */
+  var panelEl = document.getElementById('panel');
+  var panelContentEl = document.getElementById('panelContent');
+  var panelCloseEl = document.getElementById('panelClose');
+
+  var TABS = [
+    { id: 'weather', label: 'Weather' },
+    { id: 'city', label: 'City' },
+    { id: 'places', label: 'Places' },
+    { id: 'food', label: 'Food & Stay' },
+    { id: 'transport', label: 'Transport' },
+    { id: 'more', label: 'More' }
+  ];
+
+  function openPanel() {
+    state.panelOpen = true;
+    panelEl.classList.add('visible');
+  }
+  function closePanel() {
+    state.panelOpen = false;
+    panelEl.classList.remove('visible');
+    clearMarker();
+  }
+  panelCloseEl.addEventListener('click', closePanel);
+
+  function showPanelLoading() {
+    panelContentEl.innerHTML =
+      '<div class="p-loading">' +
+      '<div class="spinner"></div>' +
+      '<span class="loading-text" style="font-size:10.5px;">Reading sensors…</span>' +
+      '</div>';
+    openPanel();
+  }
+
+  /* --------------------------------------------------------------
+     Formatting helpers
+     -------------------------------------------------------------- */
+  function formatCoord(lat, lon) {
+    var latDir = lat >= 0 ? 'N' : 'S';
+    var lonDir = lon >= 0 ? 'E' : 'W';
+    return Math.abs(lat).toFixed(2) + '°' + latDir + '  ' + Math.abs(lon).toFixed(2) + '°' + lonDir;
+  }
+  function aqiCategory(aqi) {
+    if (aqi <= 50) return { label: 'Good', color: '#4ade80' };
+    if (aqi <= 100) return { label: 'Moderate', color: '#facc15' };
+    if (aqi <= 150) return { label: 'Unhealthy (Sensitive)', color: '#fb923c' };
+    if (aqi <= 200) return { label: 'Unhealthy', color: '#f87171' };
+    if (aqi <= 300) return { label: 'Very Unhealthy', color: '#c084fc' };
+    return { label: 'Hazardous', color: '#991b1b' };
+  }
+  function cToF(c) { return (c * 9 / 5) + 32; }
+  function statCard(label, value) {
+    return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value">' + value + '</div></div>';
+  }
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str === undefined || str === null ? '' : str;
+    return div.innerHTML;
+  }
+  function formatNumber(n) {
+    if (n === null || n === undefined || isNaN(n)) return '—';
+    return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
+  function formatDistance(km) {
+    if (km === undefined || km === null || isNaN(km)) return '—';
+    return km < 1 ? Math.round(km * 1000) + ' m' : km.toFixed(1) + ' km';
+  }
+  function haversineKm(lat1, lon1, lat2, lon2) {
+    var R = 6371;
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+  function formatTimeFromIso(iso) {
+    if (!iso) return '—';
+    var t = iso.split('T')[1];
+    return t ? t.slice(0, 5) : '—';
+  }
+  function formatHourFromIso(iso) {
+    if (!iso) return '';
+    var t = iso.split('T')[1];
+    return t ? t.slice(0, 2) + ':00' : '';
+  }
+  function windCompass(deg) {
+    if (deg === null || deg === undefined) return '';
+    var dirs = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+    return dirs[Math.round(deg / 22.5) % 16];
+  }
+  function getMoonPhase(date) {
+    var knownNewMoon = Date.UTC(2000, 0, 6, 18, 14, 0);
+    var synodicMonth = 29.530588853;
+    var diffDays = (date.getTime() - knownNewMoon) / 86400000;
+    var phase = diffDays % synodicMonth;
+    if (phase < 0) phase += synodicMonth;
+    var illumination = (1 - Math.cos((phase / synodicMonth) * 2 * Math.PI)) / 2;
+    var idx = Math.floor((phase / synodicMonth) * 8 + 0.5) % 8;
+    return { name: MOON_NAMES[idx], icon: MOON_ICONS[idx], illumination: Math.round(illumination * 100), phase: phase / synodicMonth };
+  }
+  function dataRow(label, value) {
+    return '<div class="data-row"><span class="data-row-label">' + label + '</span><span class="data-row-value">' + value + '</span></div>';
+  }
+
+  /* --------------------------------------------------------------
+     Favorites + recent searches
+     -------------------------------------------------------------- */
+  function getFavorites() {
+    try { return JSON.parse(localStorage.getItem('earthStationFavorites') || '[]'); }
+    catch (e) { return []; }
+  }
+  function saveFavorites(list) {
+    try { localStorage.setItem('earthStationFavorites', JSON.stringify(list)); } catch (e) {}
+  }
+  function isFavorite(lat, lon) {
+    var favs = getFavorites();
+    for (var i = 0; i < favs.length; i++) {
+      if (Math.abs(favs[i].lat - lat) < 0.01 && Math.abs(favs[i].lon - lon) < 0.01) return true;
+    }
+    return false;
+  }
+  function toggleFavorite(name, lat, lon) {
+    var favs = getFavorites();
+    var idx = -1;
+    for (var i = 0; i < favs.length; i++) {
+      if (Math.abs(favs[i].lat - lat) < 0.01 && Math.abs(favs[i].lon - lon) < 0.01) { idx = i; break; }
+    }
+    if (idx >= 0) favs.splice(idx, 1);
+    else favs.push({ name: name, lat: lat, lon: lon });
+    saveFavorites(favs);
+    return idx < 0;
+  }
+  function loadRecentSearches() {
+    try { return JSON.parse(localStorage.getItem('earthStationRecent') || '[]'); }
+    catch (e) { return []; }
+  }
+  function saveRecentSearch(entry) {
+    var list = state.recentSearches.filter(function (x) { return !(Math.abs(x.lat - entry.lat) < 0.01 && Math.abs(x.lon - entry.lon) < 0.01); });
+    list.unshift(entry);
+    list = list.slice(0, 6);
+    state.recentSearches = list;
+    try { localStorage.setItem('earthStationRecent', JSON.stringify(list)); } catch (e) {}
+  }
+
+  /* --------------------------------------------------------------
+     URL hash
+     -------------------------------------------------------------- */
+  function updateHash(lat, lon, name) {
+    var hash = '#@' + lat.toFixed(3) + ',' + lon.toFixed(3) + (name ? ',' + encodeURIComponent(name) : '');
+    try { history.replaceState(null, '', hash); } catch (e) { location.hash = hash; }
+  }
+  function parseHash() {
+    var h = location.hash;
+    if (!h || h.indexOf('#@') !== 0) return null;
+    var body = h.slice(2);
+    var parts = body.split(',');
+    if (parts.length < 2) return null;
+    var lat = parseFloat(parts[0]), lon = parseFloat(parts[1]);
+    if (isNaN(lat) || isNaN(lon)) return null;
+    var name = parts.slice(2).join(',') || null;
+    try { name = name ? decodeURIComponent(name) : null; } catch (e) {}
+    return { lat: lat, lon: lon, name: name };
+  }
+
+  /* --------------------------------------------------------------
+     Panel render
+     -------------------------------------------------------------- */
+  function renderPanel(placeName, lat, lon, weatherData, aqiData, loc) {
+    state.currentLocation = loc;
+    state.currentLocation.weatherData = weatherData;
+    state.currentLocation.aqiData = aqiData;
+
+    var current = weatherData ? weatherData.current : null;
+    var wcode = current && current.weather_code !== undefined ? current.weather_code : null;
+    var wInfo = WEATHER_CODES[wcode] || ['Conditions unavailable', '🛰️'];
+    var tempC = current ? current.temperature_2m : null;
+    var feelsC = current ? current.apparent_temperature : null;
+
+    var favActive = isFavorite(lat, lon);
+    var eyebrow = '<div class="p-eyebrow"><span class="dot"></span>LOCATION LOCK</div>';
+    var favBtn = '<button class="fav-btn' + (favActive ? ' active' : '') + '" id="favToggleBtn" title="Save to favorites">' + (favActive ? '★' : '☆') + '</button>';
+    var title = '<div class="p-title">' + escapeHtml(placeName || 'Unnamed Point') + '</div>';
+    var coords = '<div class="p-coords">' + formatCoord(lat, lon) + '</div>';
+
+    var tempDisplay = tempC === null || tempC === undefined ? '—' : Math.round(state.unit === 'C' ? tempC : cToF(tempC));
+    var feelsDisplay = feelsC === null || feelsC === undefined ? null : Math.round(state.unit === 'C' ? feelsC : cToF(feelsC));
+
+    var tempBlock =
+      '<div class="p-temp-row">' +
+      '<div><span class="p-temp" id="quickTemp">' + tempDisplay + '°</span><span class="p-temp-unit" id="unitToggle">' + state.unit + '</span></div>' +
+      '<div class="p-cond"><div class="p-cond-icon">' + wInfo[1] + '</div><div class="p-cond-label">' + wInfo[0] + '</div></div>' +
+      '</div>' +
+      '<div class="p-feels" id="quickFeels">' + (feelsDisplay !== null ? 'Feels like ' + feelsDisplay + '°' + state.unit : '') + '</div>';
+
+    var tabBar = '<div class="panel-tabs">';
+    TABS.forEach(function (t, i) {
+      tabBar += '<button class="panel-tab-btn' + (i === 0 ? ' active' : '') + '" data-tab="' + t.id + '">' + t.label + '</button>';
+    });
+    tabBar += '</div>';
+
+    var tabPanels = '<div id="tabPanelsWrap">';
+    TABS.forEach(function (t, i) {
+      tabPanels += '<div class="tab-panel' + (i === 0 ? ' active' : '') + '" id="tab-' + t.id + '"></div>';
+    });
+    tabPanels += '</div>';
+
+    var footer =
+      '<div class="p-footer" style="margin-top:32px;padding-top:18px;border-top:1px solid var(--line);font-family:var(--font-mono);font-size:10px;letter-spacing:0.04em;color:var(--mist);line-height:1.7;">Weather via Open&#8209;Meteo · Places via OpenStreetMap · City data via Wikipedia &amp; Wikidata · Country data via REST Countries · Quakes via USGS · Holidays via Nager.Date · Space weather via NOAA SWPC · ISS via WhereTheISS.at · Flights via OpenSky Network.</div>';
+
+    panelContentEl.innerHTML =
+      favBtn + eyebrow + title + coords +
+      '<div class="p-divider"></div>' +
+      tempBlock +
+      tabBar +
+      tabPanels +
+      footer;
+
+    renderWeatherTab(document.getElementById('tab-weather'), weatherData, aqiData);
+
+    // Sync soundscape to current weather
+    syncSoundscapeToWeather(weatherData);
+
+    var favBtnEl = document.getElementById('favToggleBtn');
+    if (favBtnEl) {
+      favBtnEl.addEventListener('click', function () {
+        var nowActive = toggleFavorite(placeName, lat, lon);
+        favBtnEl.textContent = nowActive ? '★' : '☆';
+        favBtnEl.classList.toggle('active', nowActive);
+        toast(nowActive ? 'Saved to favorites' : 'Removed from favorites', 'ok', 1400);
+      });
+    }
+
+    var unitToggle = document.getElementById('unitToggle');
+    if (unitToggle) {
+      unitToggle.addEventListener('click', function () {
+        state.unit = state.unit === 'C' ? 'F' : 'C';
+        document.getElementById('unitToggle').textContent = state.unit;
+        var qt = document.getElementById('quickTemp');
+        var qf = document.getElementById('quickFeels');
+        if (qt) qt.textContent = (tempC === null || tempC === undefined ? '—' : Math.round(state.unit === 'C' ? tempC : cToF(tempC))) + '°';
+        if (qf && feelsC !== null && feelsC !== undefined) qf.textContent = 'Feels like ' + Math.round(state.unit === 'C' ? feelsC : cToF(feelsC)) + '°' + state.unit;
+        renderWeatherTab(document.getElementById('tab-weather'), weatherData, aqiData);
+      });
+    }
+
+    Array.prototype.forEach.call(panelContentEl.querySelectorAll('.panel-tab-btn'), function (btn) {
+      btn.addEventListener('click', function () {
+        var tabId = btn.getAttribute('data-tab');
+        Array.prototype.forEach.call(panelContentEl.querySelectorAll('.panel-tab-btn'), function (b) { b.classList.remove('active'); });
+        Array.prototype.forEach.call(panelContentEl.querySelectorAll('.tab-panel'), function (p) { p.classList.remove('active'); });
+        btn.classList.add('active');
+        var panelDiv = document.getElementById('tab-' + tabId);
+        panelDiv.classList.add('active');
+        loadTabIfNeeded(tabId, panelDiv, loc);
+      });
+    });
+
+    openPanel();
+  }
+
+  function locationKey(loc) { return loc.lat.toFixed(3) + ',' + loc.lon.toFixed(3); }
+
+  function loadTabIfNeeded(tabId, container, loc) {
+    if (tabId === 'weather') return;
+    var key = locationKey(loc);
+    if (!state.tabCache[key]) state.tabCache[key] = {};
+    if (state.tabCache[key][tabId]) {
+      container.innerHTML = state.tabCache[key][tabId];
+      bindTabInteractions(tabId, container, loc);
+      return;
+    }
+    container.innerHTML = '<div class="info-loading"><div class="spinner small"></div><span class="loading-text" style="font-size:10px;">Fetching ' + tabId + ' data…</span></div>';
+
+    if (tabId === 'city') loadCityTab(container, loc, key);
+    else if (tabId === 'places') loadPlacesTab(container, loc, key);
+    else if (tabId === 'food') loadFoodTab(container, loc, key);
+    else if (tabId === 'transport') loadTransportTab(container, loc, key);
+    else if (tabId === 'more') loadMoreTab(container, loc, key);
+  }
+
+  function bindTabInteractions(tabId, container, loc) {
+    if (tabId === 'more') {
+      Array.prototype.forEach.call(container.querySelectorAll('.fav-chip'), function (chip) {
+        chip.addEventListener('click', function () {
+          var flat = parseFloat(chip.getAttribute('data-lat'));
+          var flon = parseFloat(chip.getAttribute('data-lon'));
+          var localPoint = latLonToVector3(flat, flon, EARTH_RADIUS);
+          placeMarker(localPoint);
+          state.rotationTarget = frontRotationFor(localPoint);
+          hideHint();
+          fetchLocationData(flat, flon, chip.getAttribute('data-name'), null);
+        });
+      });
+    }
+  }
+
+  function cacheTab(key, tabId, container) {
+    if (!state.tabCache[key]) state.tabCache[key] = {};
+    state.tabCache[key][tabId] = container.innerHTML;
+  }
+
+  /* --------------------------------------------------------------
+     Weather tab
+     -------------------------------------------------------------- */
+  function renderWeatherTab(container, weatherData, aqiData) {
+    if (!container) return;
+    var current = weatherData ? weatherData.current : null;
+    var hourly = weatherData ? weatherData.hourly : null;
+    var daily = weatherData ? weatherData.daily : null;
+
+    var html = '';
+
+    html += '<div class="section-title"><span>Temperature Trend</span><span class="stitch"></span></div>';
+    html += renderSparkline(hourly, current && current.time);
+
+    html += '<div class="section-title"><span>Hourly · Next 48h</span><span class="stitch"></span></div>';
+    html += renderHourlyStrip(hourly, current && current.time);
+
+    html += '<div class="section-title"><span>15-Day Forecast</span><span class="stitch"></span></div>';
+    html += renderDailyList(daily);
+
+    var sunrise = daily && daily.sunrise ? daily.sunrise[0] : null;
+    var sunset = daily && daily.sunset ? daily.sunset[0] : null;
+    var nowIso = current ? current.time : null;
+    html += '<div class="section-title"><span>Sun Path</span><span class="stitch"></span></div>';
+    html += renderSunArc(sunrise, sunset, nowIso);
+
+    var windSpeed = current ? current.wind_speed_10m : null;
+    var windDir = current ? current.wind_direction_10m : null;
+    var windGust = daily && daily.wind_speed_10m_max ? daily.wind_speed_10m_max[0] : null;
+    html += '<div class="section-title"><span>Wind</span><span class="stitch"></span></div>';
+    html += renderWindCompass(windSpeed, windDir, windGust);
+
+    var uvNow = hourly && hourly.uv_index ? hourly.uv_index[0] : null;
+    var visNow = hourly && hourly.visibility ? hourly.visibility[0] : null;
+    var dewNow = hourly && hourly.dew_point_2m ? hourly.dew_point_2m[0] : null;
+    var rainProbToday = daily && daily.precipitation_probability_max ? daily.precipitation_probability_max[0] : null;
+    var snowToday = daily && daily.snowfall_sum ? daily.snowfall_sum[0] : null;
+    var windDirTxt = current ? windCompass(current.wind_direction_10m) : '';
+
+    html += '<div class="section-title"><span>Conditions</span><span class="stitch"></span></div>';
+    html += '<div class="stat-grid">' +
+      statCard('Humidity', current && current.relative_humidity_2m !== undefined ? Math.round(current.relative_humidity_2m) + '%' : '—') +
+      statCard('Wind', current && current.wind_speed_10m !== undefined ? current.wind_speed_10m.toFixed(1) + ' km/h ' + windDirTxt : '—') +
+      statCard('Pressure', current && current.surface_pressure !== undefined ? Math.round(current.surface_pressure) + ' hPa' : '—') +
+      statCard('Rain Chance', rainProbToday !== null && rainProbToday !== undefined ? rainProbToday + '%' : '—') +
+      statCard('UV Index', uvNow !== null && uvNow !== undefined ? uvNow.toFixed(1) : '—') +
+      statCard('Visibility', visNow !== null && visNow !== undefined ? (visNow / 1000).toFixed(1) + ' km' : '—') +
+      statCard('Cloud Cover', current && current.cloud_cover !== undefined ? Math.round(current.cloud_cover) + '%' : '—') +
+      statCard('Dew Point', dewNow !== null && dewNow !== undefined ? Math.round(state.unit === 'C' ? dewNow : cToF(dewNow)) + '°' + state.unit : '—') +
+      statCard('Snowfall', snowToday !== null && snowToday !== undefined ? snowToday.toFixed(1) + ' cm' : '0 cm') +
+      '</div>';
+
+    var moon = getMoonPhase(new Date());
+
+    html += '<div class="section-title"><span>Sun &amp; Moon</span><span class="stitch"></span></div>';
+    html += '<div class="sunmoon-grid">' +
+      '<div class="sunmoon-card"><div class="sunmoon-icon">🌅</div><div class="sunmoon-label">Sunrise</div><div class="sunmoon-value">' + formatTimeFromIso(sunrise) + '</div></div>' +
+      '<div class="sunmoon-card"><div class="sunmoon-icon">🌇</div><div class="sunmoon-label">Sunset</div><div class="sunmoon-value">' + formatTimeFromIso(sunset) + '</div></div>' +
+      '<div class="sunmoon-card"><div class="sunmoon-icon">' + moon.icon + '</div><div class="sunmoon-label">Moon Phase</div><div class="sunmoon-value">' + moon.name + '</div></div>' +
+      '<div class="sunmoon-card"><div class="sunmoon-icon">✨</div><div class="sunmoon-label">Illumination</div><div class="sunmoon-value">' + moon.illumination + '%</div></div>' +
+      '</div>' +
+      '<div class="note-card">Moonrise/moonset require a dedicated ephemeris service — phase &amp; illumination are computed locally.</div>';
+
+    var aqiValue = aqiData && aqiData.us_aqi !== undefined && aqiData.us_aqi !== null ? Math.round(aqiData.us_aqi) : null;
+    var aqiCat = aqiValue !== null ? aqiCategory(aqiValue) : null;
+
+    html += '<div class="section-title"><span>Air Quality &amp; Pollen</span><span class="stitch"></span></div>';
+    if (aqiValue !== null) {
+      var pct = Math.min(100, (aqiValue / 300) * 100);
+      html += '<div class="aqi-block">' +
+        '<div class="aqi-head"><span class="aqi-label">US AQI</span>' +
+        '<div class="aqi-value-wrap"><span class="aqi-value">' + aqiValue + '</span>' +
+        '<span class="aqi-tag" style="color:' + aqiCat.color + ';border:1px solid ' + aqiCat.color + '55;background:' + aqiCat.color + '1a;">' + aqiCat.label + '</span></div></div>' +
+        '<div class="aqi-bar-track"><div class="aqi-bar-fill" style="width:' + pct + '%; background:' + aqiCat.color + ';"></div></div></div>';
+
+      if (aqiData.pm2_5 !== undefined && aqiData.pm2_5 !== null) {
+        html += '<div class="stat-grid" style="margin-top:10px;">' +
+          statCard('PM2.5', Math.round(aqiData.pm2_5) + ' µg/m³') +
+          statCard('PM10', aqiData.pm10 !== undefined && aqiData.pm10 !== null ? Math.round(aqiData.pm10) + ' µg/m³' : '—') +
+          statCard('European AQI', aqiData.european_aqi !== undefined && aqiData.european_aqi !== null ? Math.round(aqiData.european_aqi) : '—') +
+          '</div>';
+      }
+    } else {
+      html += '<div class="info-empty">No air quality data for this location.</div>';
+    }
+
+    var pollenFields = [
+      ['alder_pollen', 'Alder'], ['birch_pollen', 'Birch'], ['grass_pollen', 'Grass'],
+      ['mugwort_pollen', 'Mugwort'], ['olive_pollen', 'Olive'], ['ragweed_pollen', 'Ragweed']
+    ];
+    var pollenCards = '';
+    var hasPollen = false;
+    pollenFields.forEach(function (p) {
+      var v = aqiData ? aqiData[p[0]] : null;
+      if (v !== null && v !== undefined) { hasPollen = true; pollenCards += statCard(p[1] + ' Pollen', Math.round(v) + ' gr/m³'); }
+    });
+    if (hasPollen) html += '<div class="stat-grid" style="margin-top:10px;">' + pollenCards + '</div>';
+    else html += '<div class="note-card">Pollen data is currently only available for parts of Europe via the free Open&#8209;Meteo network — not reported for this location.</div>';
+
+    html += '<div class="section-title"><span>Lightning &amp; Storm Tracking</span><span class="stitch"></span></div>';
+    html += '<div class="note-card">Live lightning strikes and storm-cell tracking need a dedicated radar/lightning API (e.g. a paid RainViewer or Tomorrow.io key) — not wired up in this free build.</div>';
+
+    container.innerHTML = html;
+  }
+
+  /* -------------------- sparkline -------------------- */
+  function renderSparkline(hourly, currentTimeIso) {
+    if (!hourly || !hourly.time || !hourly.time.length) return '<div class="info-empty">Trend unavailable.</div>';
+    var startIdx = hourly.time.indexOf(currentTimeIso);
+    if (startIdx < 0) startIdx = 0;
+    var end = Math.min(startIdx + 24, hourly.time.length);
+    var temps = [];
+    var times = [];
+    for (var i = startIdx; i < end; i++) {
+      var t = hourly.temperature_2m ? hourly.temperature_2m[i] : null;
+      if (t === null || t === undefined) continue;
+      temps.push(state.unit === 'C' ? t : cToF(t));
+      times.push(hourly.time[i]);
+    }
+    if (temps.length < 2) return '<div class="info-empty">Not enough data for a trend.</div>';
+
+    var minT = Math.min.apply(null, temps);
+    var maxT = Math.max.apply(null, temps);
+    var range = Math.max(1, maxT - minT);
+
+    var W = 300, H = 80, pad = 8;
+    var pts = temps.map(function (t, i) {
+      var x = pad + (i / (temps.length - 1)) * (W - pad * 2);
+      var y = H - pad - ((t - minT) / range) * (H - pad * 2);
+      return [x, y];
+    });
+    var pathLine = 'M ' + pts.map(function (p) { return p[0].toFixed(1) + ' ' + p[1].toFixed(1); }).join(' L ');
+    var areaPath = pathLine + ' L ' + pts[pts.length - 1][0].toFixed(1) + ' ' + (H - pad) + ' L ' + pts[0][0].toFixed(1) + ' ' + (H - pad) + ' Z';
+
+    var gid = 'grad' + Math.random().toString(36).slice(2, 8);
+
+    var peak = Math.max.apply(null, temps);
+    var trough = Math.min.apply(null, temps);
+    var peakIdx = temps.indexOf(peak);
+    var troughIdx = temps.indexOf(trough);
+
+    var svg =
+      '<div class="chart-wrap">' +
+      '<div class="chart-title"><span>Next 24h · ' + (state.unit === 'C' ? '°C' : '°F') + '</span><strong>' + Math.round(peak) + '° / ' + Math.round(trough) + '°</strong></div>' +
+      '<svg class="chart-svg" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+      '<defs><linearGradient id="' + gid + '" x1="0" y1="0" x2="0" y2="1">' +
+      '<stop offset="0%" stop-color="' + getAccent() + '" stop-opacity="0.35"/>' +
+      '<stop offset="100%" stop-color="' + getAccent() + '" stop-opacity="0"/>' +
+      '</linearGradient></defs>' +
+      '<path d="' + areaPath + '" fill="url(#' + gid + ')" />' +
+      '<path d="' + pathLine + '" fill="none" stroke="' + getAccent() + '" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>' +
+      '<circle cx="' + pts[peakIdx][0].toFixed(1) + '" cy="' + pts[peakIdx][1].toFixed(1) + '" r="3" fill="#f5a94e"/>' +
+      '<circle cx="' + pts[troughIdx][0].toFixed(1) + '" cy="' + pts[troughIdx][1].toFixed(1) + '" r="3" fill="#7dd3fc"/>' +
+      '</svg>' +
+      '<div class="chart-legend"><span>' + formatHourFromIso(times[0]) + '</span><span>' + formatHourFromIso(times[times.length - 1]) + '</span></div>' +
+      '</div>';
+    return svg;
+  }
+
+  function getAccent() {
+    var v = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim();
+    return v || '#5eead4';
+  }
+
+  /* -------------------- sun arc -------------------- */
+  function renderSunArc(sunriseIso, sunsetIso, nowIso) {
+    if (!sunriseIso || !sunsetIso) return '<div class="info-empty">Sun path unavailable.</div>';
+    var sr = new Date(sunriseIso).getTime();
+    var ss = new Date(sunsetIso).getTime();
+    var now = nowIso ? new Date(nowIso).getTime() : Date.now();
+    var t = Math.max(0, Math.min(1, (now - sr) / Math.max(1, ss - sr)));
+    var theta = Math.PI * (1 - t);
+    var cx = 150, cy = 72;
+    var rx = 140, ry = 62;
+    var x = cx + rx * Math.cos(theta);
+    var y = cy - ry * Math.sin(theta);
+    var isDay = t > 0 && t < 1 && now >= sr && now <= ss;
+    var sunColor = isDay ? '#f5a94e' : '#7d8aa3';
+    var sunOpacity = isDay ? 1 : 0.5;
+
+    return '<div class="sun-arc-wrap">' +
+      '<svg class="sun-arc-svg" viewBox="0 0 300 80" preserveAspectRatio="none">' +
+      '<defs><linearGradient id="arcgrad" x1="0" y1="0" x2="1" y2="0">' +
+      '<stop offset="0%" stop-color="#5eead4" stop-opacity="0.4"/>' +
+      '<stop offset="50%" stop-color="#f5a94e" stop-opacity="0.7"/>' +
+      '<stop offset="100%" stop-color="#5eead4" stop-opacity="0.4"/>' +
+      '</linearGradient></defs>' +
+      '<path d="M 10 72 A 140 62 0 0 1 290 72" fill="none" stroke="url(#arcgrad)" stroke-width="1.5" stroke-dasharray="3 4"/>' +
+      '<path d="M 10 72 A 140 62 0 0 1 ' + cx + ' ' + (72 - 62) + '" fill="none" stroke="' + sunColor + '" stroke-width="2" opacity="' + sunOpacity + '"/>' +
+      '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="4.5" fill="' + sunColor + '" opacity="' + sunOpacity + '"/>' +
+      '<circle cx="' + x.toFixed(1) + '" cy="' + y.toFixed(1) + '" r="8" fill="' + sunColor + '" opacity="0.2"/>' +
+      '<line x1="10" y1="72" x2="290" y2="72" stroke="rgba(125,138,163,0.25)" stroke-width="1"/>' +
+      '</svg>' +
+      '<div class="sun-arc-times">' +
+      '<span>Rise <strong>' + formatTimeFromIso(sunriseIso) + '</strong></span>' +
+      '<span>' + (isDay ? 'Daytime' : 'Nighttime') + '</span>' +
+      '<span>Set <strong>' + formatTimeFromIso(sunsetIso) + '</strong></span>' +
+      '</div>' +
+      '</div>';
+  }
+
+  /* -------------------- wind compass -------------------- */
+  function renderWindCompass(speed, dirDeg, gust) {
+    if (speed === null || speed === undefined) return '<div class="info-empty">Wind data unavailable.</div>';
+    dirDeg = dirDeg || 0;
+    var cx = 37, cy = 37, r = 30;
+    var arrowAngle = (dirDeg - 90) * Math.PI / 180;
+    var ax = cx + r * Math.cos(arrowAngle);
+    var ay = cy + r * Math.sin(arrowAngle);
+    var tailX = cx - 8 * Math.cos(arrowAngle);
+    var tailY = cy - 8 * Math.sin(arrowAngle);
+
+    var compass =
+      '<div class="compass-wrap">' +
+      '<svg class="compass-svg" viewBox="0 0 74 74">' +
+      '<circle cx="37" cy="37" r="30" fill="none" stroke="rgba(125,138,163,0.25)" stroke-width="1"/>' +
+      '<circle cx="37" cy="37" r="22" fill="none" stroke="rgba(125,138,163,0.12)" stroke-width="1"/>' +
+      '<text x="37" y="10" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7d8aa3">N</text>' +
+      '<text x="69" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7d8aa3">E</text>' +
+      '<text x="37" y="71" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7d8aa3">S</text>' +
+      '<text x="6" y="40" text-anchor="middle" font-family="JetBrains Mono" font-size="7" fill="#7d8aa3">W</text>' +
+      '<line x1="' + tailX.toFixed(1) + '" y1="' + tailY.toFixed(1) + '" x2="' + ax.toFixed(1) + '" y2="' + ay.toFixed(1) + '" stroke="#f5a94e" stroke-width="2" stroke-linecap="round"/>' +
+      '<circle cx="' + ax.toFixed(1) + '" cy="' + ay.toFixed(1) + '" r="3" fill="#f5a94e"/>' +
+      '<circle cx="37" cy="37" r="2.5" fill="#e8edf6"/>' +
+      '</svg>' +
+      '<div class="compass-info">' +
+      '<div class="compass-value">' + speed.toFixed(1) + ' <span style="font-size:11px;color:var(--mist)">km/h</span></div>' +
+      '<div class="compass-label">From ' + windCompass(dirDeg) + ' · ' + Math.round(dirDeg) + '°</div>' +
+      (gust !== null && gust !== undefined ? '<div class="compass-gust">Gusts up to ' + gust.toFixed(1) + ' km/h</div>' : '') +
+      '</div>' +
+      '</div>';
+    return compass;
+  }
+
+  /* -------------------- hourly strip -------------------- */
+  function renderHourlyStrip(hourly, currentTimeIso) {
+    if (!hourly || !hourly.time || !hourly.time.length) return '<div class="info-empty">Hourly data unavailable.</div>';
+    var startIdx = hourly.time.indexOf(currentTimeIso);
+    if (startIdx < 0) startIdx = 0;
+    var items = '';
+    var end = Math.min(startIdx + 48, hourly.time.length);
+    for (var i = startIdx; i < end; i++) {
+      var hourLabel = i === startIdx ? 'Now' : formatHourFromIso(hourly.time[i]);
+      var wc = hourly.weather_code ? hourly.weather_code[i] : null;
+      var info = WEATHER_CODES[wc] || ['', '🌡️'];
+      var t = hourly.temperature_2m ? hourly.temperature_2m[i] : null;
+      var temp = t === null || t === undefined ? '—' : Math.round(state.unit === 'C' ? t : cToF(t));
+      var rain = hourly.precipitation_probability ? hourly.precipitation_probability[i] : null;
+      items += '<div class="hourly-item' + (i === startIdx ? ' is-now' : '') + '">' +
+        '<div class="hourly-time">' + hourLabel + '</div>' +
+        '<div class="hourly-icon">' + info[1] + '</div>' +
+        '<div class="hourly-temp">' + temp + '°</div>' +
+        '<div class="hourly-rain">' + (rain !== null && rain !== undefined ? '💧' + rain + '%' : '\u00A0') + '</div>' +
+        '</div>';
+    }
+    return '<div class="hourly-scroll">' + items + '</div>';
+  }
+
+  /* -------------------- daily list -------------------- */
+  function renderDailyList(daily) {
+    if (!daily || !daily.time || !daily.time.length) return '<div class="info-empty">Forecast unavailable.</div>';
+    var minAll = Math.min.apply(null, daily.temperature_2m_min);
+    var maxAll = Math.max.apply(null, daily.temperature_2m_max);
+    var range = Math.max(1, maxAll - minAll);
+    var html = '';
+    for (var i = 0; i < daily.time.length; i++) {
+      var d = new Date(daily.time[i] + 'T12:00:00');
+      var dayLabel = i === 0 ? 'Today' : d.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' });
+      var wc = daily.weather_code ? daily.weather_code[i] : null;
+      var info = WEATHER_CODES[wc] || ['', '🌡️'];
+      var tmin = daily.temperature_2m_min[i], tmax = daily.temperature_2m_max[i];
+      var tminD = Math.round(state.unit === 'C' ? tmin : cToF(tmin));
+      var tmaxD = Math.round(state.unit === 'C' ? tmax : cToF(tmax));
+      var leftPct = ((tmin - minAll) / range) * 100;
+      var widthPct = Math.max(4, ((tmax - tmin) / range) * 100);
+      var rain = daily.precipitation_probability_max ? daily.precipitation_probability_max[i] : null;
+      html += '<div class="daily-row">' +
+        '<div class="daily-day">' + dayLabel + '</div>' +
+        '<div class="daily-icon">' + info[1] + '</div>' +
+        '<div class="daily-rain">' + (rain !== null && rain !== undefined ? '💧' + rain + '%' : '') + '</div>' +
+        '<div class="daily-temps">' +
+        '<div class="daily-min">' + tminD + '°</div>' +
+        '<div class="daily-bar-track"><div class="daily-bar-fill" style="left:' + leftPct + '%; width:' + widthPct + '%;"></div></div>' +
+        '<div class="daily-max">' + tmaxD + '°</div>' +
+        '</div></div>';
+    }
+    return html;
+  }
+
+  /* --------------------------------------------------------------
+     City tab
+     -------------------------------------------------------------- */
+  function loadCityTab(container, loc, key) {
+    var cityQuery = loc.cityQuery;
+
+    Promise.all([
+      getWikiSummary(cityQuery),
+      getWikidataDetails(cityQuery),
+      getCountryInfo(loc.countryCode)
+    ]).then(function (results) {
+      var summary = results[0], wd = results[1], country = results[2];
+      var currencyCode = country && country.currencies ? Object.keys(country.currencies)[0] : null;
+      getCurrencyRate(currencyCode).then(function (rate) {
+        renderCityTab(container, cityQuery, loc, summary, wd, country, currencyCode, rate);
+        cacheTab(key, 'city', container);
+      });
+    });
+  }
+
+  function renderCityTab(container, cityQuery, loc, summary, wd, country, currencyCode, rate) {
+    var html = '';
+
+    var img = summary && (summary.originalimage || summary.thumbnail);
+    html += '<div class="section-title"><span>City Snapshot</span><span class="stitch"></span></div>';
+    html += '<div class="city-hero">';
+    if (img && img.source) {
+      html += '<img src="' + img.source + '" alt="' + escapeHtml((summary && summary.title) || cityQuery) + '" loading="lazy" />';
+    } else {
+      html += '<div class="city-hero-fallback">🏙️</div>';
+    }
+    html += '<div class="city-hero-caption">' + escapeHtml((summary && summary.title) || cityQuery) + '</div></div>';
+
+    if (summary && summary.extract) {
+      var extract = summary.extract;
+      if (extract.length > 340) extract = extract.slice(0, 340).replace(/\s+\S*$/, '') + '…';
+      html += '<div class="city-extract">' + escapeHtml(extract) + '</div>';
+    }
+    if (wd && wd.nickname) {
+      html += '<div class="note-card">Nicknamed <strong>' + escapeHtml(wd.nickname) + '</strong></div>';
+    }
+
+    var population = wd ? wd.population : null;
+    var areaKm2 = wd ? wd.areaKm2 : null;
+    var elevationM = wd ? wd.elevationM : null;
+    var density = (population && areaKm2) ? (population / areaKm2) : null;
+
+    html += '<div class="section-title"><span>Population &amp; Geography</span><span class="stitch"></span></div>';
+    if (population) {
+      html += '<div class="pop-card"><div><div class="pop-label">Population (Wikidata)</div><div class="pop-value">' + formatNumber(population) + '</div></div><div class="pop-icon">👥</div></div>';
+    }
+    html += '<div class="data-list" style="margin-top:10px;">' +
+      dataRow('Area', areaKm2 ? formatNumber(areaKm2) + ' km²' : '—') +
+      dataRow('Population Density', density ? formatNumber(density) + ' /km²' : '—') +
+      dataRow('Elevation', elevationM !== null && elevationM !== undefined ? formatNumber(elevationM) + ' m' : '—') +
+      dataRow('Coordinates', formatCoord(loc.lat, loc.lon)) +
+      dataRow('Time Zone', loc.timezone ? loc.timezone + (loc.timezoneAbbr ? ' (' + loc.timezoneAbbr + ')' : '') : '—') +
+      dataRow('Local Time', loc.localTime || '—') +
+      '</div>';
+
+    html += '<div class="section-title"><span>Country &amp; Region</span><span class="stitch"></span></div>';
+    html += '<div class="data-list">' +
+      dataRow('Country', (country && country.name && country.name.common) ? escapeHtml(country.name.common) : (loc.countryName || '—')) +
+      dataRow('State / Province', loc.adminRegion || '—') +
+      dataRow('Capital', country && country.capital ? escapeHtml(country.capital[0]) : '—') +
+      dataRow('Region', country && country.region ? escapeHtml(country.region + (country.subregion ? ' · ' + country.subregion : '')) : '—') +
+      dataRow('Language(s)', country && country.languages ? escapeHtml(Object.values(country.languages).join(', ')) : '—') +
+      dataRow('Currency', currencyCode ? escapeHtml(currencyCode) + (rate ? ' (1 USD ≈ ' + rate.toFixed(2) + ' ' + currencyCode + ')' : '') : '—') +
+      dataRow('Calling Code', country && country.idd && country.idd.root ? country.idd.root + (country.idd.suffixes ? country.idd.suffixes[0] : '') : '—') +
+      '</div>' +
+      '<div class="note-card">Postal codes vary by exact address and aren\'t resolvable from a single map point.</div>';
+
+    html += '<div class="section-title"><span>History</span><span class="stitch"></span></div>';
+    var founded = null;
+    if (wd && wd.inceptionRaw) {
+      var m = /^\+?(-?\d+)-/.exec(wd.inceptionRaw);
+      if (m) founded = m[1];
+    }
+    html += '<div class="data-list">' +
+      dataRow('Founded / Established', founded || '—') +
+      dataRow('Founder', (wd && wd.founder) ? escapeHtml(wd.founder) : '—') +
+      '</div>';
+    if (summary && summary.extract) {
+      html += '<div class="note-card">A detailed historical timeline isn\'t available from free sources beyond the overview above — see the full Wikipedia article for more.</div>';
+    }
+    html += '<div class="note-card">GDP and detailed demographic breakdowns require licensed economic datasets and aren\'t included here.</div>';
+
+    if (summary && summary.content_urls && summary.content_urls.desktop && summary.content_urls.desktop.page) {
+      html += '<a class="wiki-link" href="' + summary.content_urls.desktop.page + '" target="_blank" rel="noopener noreferrer">Read full article on Wikipedia →</a>';
+    }
+
+    container.innerHTML = html;
+  }
+
+  /* --------------------------------------------------------------
+     Data helpers
+     -------------------------------------------------------------- */
+  function getWikiSummary(title) {
+    var url = 'https://en.wikipedia.org/api/rest_v1/page/summary/' + encodeURIComponent(title);
+    return fetch(url).then(function (r) { if (!r.ok) throw new Error('not found'); return r.json(); })
+      .catch(function () { return null; });
+  }
+
+  function resolveEntityLabel(qid) {
+    var url = 'https://www.wikidata.org/w/api.php?action=wbgetentities&ids=' + qid + '&props=labels&languages=en&format=json&origin=*';
+    return fetch(url).then(function (r) { return r.json(); }).then(function (d) {
+      var ent = d && d.entities && d.entities[qid];
+      return ent && ent.labels && ent.labels.en ? ent.labels.en.value : null;
+    }).catch(function () { return null; });
+  }
+
+  function getWikidataDetails(query) {
+    var searchUrl = 'https://www.wikidata.org/w/api.php?action=wbsearchentities&search=' +
+      encodeURIComponent(query) + '&language=en&format=json&origin=*&type=item&limit=1';
+    return fetch(searchUrl).then(function (r) { return r.json(); }).then(function (d) {
+      var id = d && d.search && d.search[0] && d.search[0].id;
+      if (!id) return null;
+      var url = 'https://www.wikidata.org/w/api.php?action=wbgetclaims&entity=' + id + '&format=json&origin=*';
+      return fetch(url).then(function (r) { return r.json(); }).then(function (cd) {
+        var claims = cd && cd.claims;
+        if (!claims) return null;
+        function num(prop) {
+          var c = claims[prop];
+          if (!c || !c.length) return null;
+          var snak = c[c.length - 1].mainsnak;
+          var v = snak && snak.datavalue && snak.datavalue.value;
+          return v && v.amount !== undefined ? parseFloat(String(v.amount).replace('+', '')) : null;
+        }
+        function time(prop) {
+          var c = claims[prop];
+          if (!c || !c.length) return null;
+          var snak = c[0].mainsnak;
+          var v = snak && snak.datavalue && snak.datavalue.value;
+          return v && v.time ? v.time : null;
+        }
+        function str(prop) {
+          var c = claims[prop];
+          if (!c || !c.length) return null;
+          var snak = c[0].mainsnak;
+          var v = snak && snak.datavalue && snak.datavalue.value;
+          return typeof v === 'string' ? v : null;
+        }
+        var result = {
+          population: num('P1082'),
+          areaKm2: num('P2046'),
+          elevationM: num('P2044'),
+          inceptionRaw: time('P571'),
+          nickname: str('P1449'),
+          founder: null
+        };
+        var founderClaim = claims.P112 && claims.P112[0];
+        var founderSnak = founderClaim && founderClaim.mainsnak;
+        var founderVal = founderSnak && founderSnak.datavalue && founderSnak.datavalue.value;
+        var founderId = founderVal && founderVal.id;
+        if (founderId) {
+          return resolveEntityLabel(founderId).then(function (label) { result.founder = label; return result; });
+        }
+        return result;
+      });
+    }).catch(function () { return null; });
+  }
+
+  function getCountryInfo(countryCode) {
+    if (!countryCode) return Promise.resolve(null);
+    var url = 'https://restcountries.com/v3.1/alpha/' + countryCode + '?fields=name,capital,region,subregion,languages,currencies,idd,population,area,cca2';
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+  }
+
+  function getCurrencyRate(currencyCode) {
+    if (!currencyCode) return Promise.resolve(null);
+    if (currencyCode === 'USD') return Promise.resolve(1);
+    // Frankfurter — free, no key, daily ECB rates
+    var url = 'https://api.frankfurter.app/latest?from=USD&to=' + currencyCode;
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      return d && d.rates && d.rates[currencyCode] ? d.rates[currencyCode] : null;
+    }).catch(function () { return null; });
+  }
+
+  /* --------------------------------------------------------------
+     Places tab
+     -------------------------------------------------------------- */
+  var PLACE_CATEGORY_ORDER = ['Tourist Attractions','Museums','Parks & Gardens','Zoos','Aquariums',
+    'Adventure & Theme Parks','Churches','Mosques','Temples','Synagogues','Places of Worship',
+    'Beaches','Mountains','Lakes','National Parks','Shopping Malls','Markets'];
+
+  function overpassFetch(query) {
+    var url = 'https://overpass-api.de/api/interpreter?data=' + encodeURIComponent(query);
+    return fetch(url).then(function (r) { if (!r.ok) throw new Error('overpass error'); return r.json(); })
+      .then(function (d) { return (d && d.elements) || []; })
+      .catch(function () { return []; });
+  }
+
+  function categorizePlaceElement(t) {
+    if (t.tourism === 'museum') return { cat: 'Museums', emoji: '🏛️' };
+    if (t.tourism === 'attraction' || t.tourism === 'viewpoint') return { cat: 'Tourist Attractions', emoji: '📸' };
+    if (t.tourism === 'theme_park') return { cat: 'Adventure & Theme Parks', emoji: '🎢' };
+    if (t.leisure === 'park' || t.leisure === 'garden') return { cat: 'Parks & Gardens', emoji: '🌳' };
+    if (t.tourism === 'zoo') return { cat: 'Zoos', emoji: '🦁' };
+    if (t.tourism === 'aquarium') return { cat: 'Aquariums', emoji: '🐠' };
+    if (t.amenity === 'place_of_worship') {
+      var r = t.religion;
+      if (r === 'christian') return { cat: 'Churches', emoji: '⛪' };
+      if (r === 'muslim') return { cat: 'Mosques', emoji: '🕌' };
+      if (r === 'hindu' || r === 'buddhist') return { cat: 'Temples', emoji: '🛕' };
+      if (r === 'jewish') return { cat: 'Synagogues', emoji: '🕍' };
+      return { cat: 'Places of Worship', emoji: '🙏' };
+    }
+    if (t.natural === 'beach') return { cat: 'Beaches', emoji: '🏖️' };
+    if (t.natural === 'peak') return { cat: 'Mountains', emoji: '⛰️' };
+    if (t.natural === 'water') return { cat: 'Lakes', emoji: '🏞️' };
+    if (t.boundary === 'national_park') return { cat: 'National Parks', emoji: '🌲' };
+    if (t.shop === 'mall') return { cat: 'Shopping Malls', emoji: '🛍️' };
+    if (t.amenity === 'marketplace') return { cat: 'Markets', emoji: '🧺' };
+    return null;
+  }
+
+  function loadPlacesTab(container, loc, key) {
+    var q = '[out:json][timeout:25];(' +
+      'node["tourism"~"^(attraction|viewpoint|theme_park|museum|zoo|aquarium)$"](around:18000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["leisure"~"^(park|garden)$"](around:10000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["amenity"="place_of_worship"](around:9000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["natural"="beach"](around:35000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["natural"="peak"](around:45000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["natural"="water"](around:15000,' + loc.lat + ',' + loc.lon + ');' +
+      'way["boundary"="national_park"](around:70000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["shop"="mall"](around:12000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["amenity"="marketplace"](around:9000,' + loc.lat + ',' + loc.lon + ');' +
+      ');out center 200;';
+
+    overpassFetch(q).then(function (elements) {
+      var buckets = {};
+      elements.forEach(function (el) {
+        var tags = el.tags || {};
+        if (!tags.name) return;
+        var info = categorizePlaceElement(tags);
+        if (!info) return;
+        var lat = el.lat !== undefined ? el.lat : (el.center && el.center.lat);
+        var lon = el.lon !== undefined ? el.lon : (el.center && el.center.lon);
+        if (lat === undefined || lon === undefined) return;
+        var dist = haversineKm(loc.lat, loc.lon, lat, lon);
+        if (!buckets[info.cat]) buckets[info.cat] = [];
+        buckets[info.cat].push({ name: tags.name, dist: dist, emoji: info.emoji, id: el.id, type: el.type });
+      });
+
+      var html = '';
+      var anyResults = false;
+      PLACE_CATEGORY_ORDER.forEach(function (cat) {
+        if (!buckets[cat] || !buckets[cat].length) return;
+        anyResults = true;
+        var items = buckets[cat].sort(function (a, b) { return a.dist - b.dist; }).slice(0, 5);
+        html += '<div class="category-block"><div class="category-heading">' + cat + '</div><div class="poi-list">';
+        items.forEach(function (p) {
+          var osmUrl = 'https://www.openstreetmap.org/' + p.type + '/' + p.id;
+          html += '<a class="poi-item" href="' + osmUrl + '" target="_blank" rel="noopener noreferrer">' +
+            '<div class="poi-thumb-fallback">' + p.emoji + '</div>' +
+            '<div class="poi-info"><div class="poi-name">' + escapeHtml(p.name) + '</div><div class="poi-dist">' + formatDistance(p.dist) + ' away</div></div>' +
+            '</a>';
+        });
+        html += '</div></div>';
+      });
+
+      if (!anyResults) html = '<div class="info-empty">No categorized points of interest found nearby via OpenStreetMap.</div>';
+      html += '<div class="note-card">"Hidden gems" and curated UNESCO listings need editorial/licensed datasets — shown here are named OpenStreetMap points within category-appropriate radii.</div>';
+
+      container.innerHTML = html;
+      cacheTab(key, 'places', container);
+    });
+  }
+
+  /* --------------------------------------------------------------
+     Food & Stay tab
+     -------------------------------------------------------------- */
+  var FOOD_CATEGORY_ORDER = ['Restaurants', 'Cafes', 'Fast Food & Street Food', 'Hotels', 'Hostels & Guesthouses', 'Camping'];
+
+  function categorizeFoodElement(t) {
+    if (t.amenity === 'restaurant') return { cat: 'Restaurants', emoji: '🍽️' };
+    if (t.amenity === 'cafe') return { cat: 'Cafes', emoji: '☕' };
+    if (t.amenity === 'fast_food') return { cat: 'Fast Food & Street Food', emoji: '🌭' };
+    if (t.tourism === 'hotel') return { cat: 'Hotels', emoji: '🏨' };
+    if (t.tourism === 'hostel' || t.tourism === 'guest_house') return { cat: 'Hostels & Guesthouses', emoji: '🛏️' };
+    if (t.tourism === 'camp_site') return { cat: 'Camping', emoji: '⛺' };
+    return null;
+  }
+
+  function loadFoodTab(container, loc, key) {
+    var q = '[out:json][timeout:25];(' +
+      'node["amenity"~"^(restaurant|cafe|fast_food)$"](around:6000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["tourism"="hotel"](around:8000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["tourism"~"^(hostel|guest_house)$"](around:8000,' + loc.lat + ',' + loc.lon + ');' +
+      'node["tourism"="camp_site"](around:25000,' + loc.lat + ',' + loc.lon + ');' +
+      ');out center 200;';
+
+    overpassFetch(q).then(function (elements) {
+      var buckets = {};
+      elements.forEach(function (el) {
+        var tags = el.tags || {};
+        if (!tags.name) return;
+        var info = categorizeFoodElement(tags);
+        if (!info) return;
+        var lat = el.lat, lon = el.lon;
+        if (lat === undefined || lon === undefined) return;
+        var dist = haversineKm(loc.lat, loc.lon, lat, lon);
+        var label = tags.name + (tags.cuisine ? ' — ' + tags.cuisine.replace(/_/g, ' ') : '');
+        var veg = tags['diet:vegetarian'] === 'yes' || tags['diet:vegan'] === 'yes';
+        if (!buckets[info.cat]) buckets[info.cat] = [];
+        buckets[info.cat].push({ name: label, dist: dist, emoji: info.emoji, id: el.id, veg: veg });
+      });
+
+      var html = '';
+      var anyResults = false;
+      FOOD_CATEGORY_ORDER.forEach(function (cat) {
+        if (!buckets[cat] || !buckets[cat].length) return;
+        anyResults = true;
+        var items = buckets[cat].sort(function (a, b) { return a.dist - b.dist; }).slice(0, 6);
+        html += '<div class="category-block"><div class="category-heading">' + cat + '</div><div class="poi-list">';
+        items.forEach(function (p) {
+          var osmUrl = 'https://www.openstreetmap.org/node/' + p.id;
+          html += '<a class="poi-item" href="' + osmUrl + '" target="_blank" rel="noopener noreferrer">' +
+            '<div class="poi-thumb-fallback">' + p.emoji + '</div>' +
+            '<div class="poi-info"><div class="poi-name">' + escapeHtml(p.name) + (p.veg ? ' 🌱' : '') + '</div><div class="poi-dist">' + formatDistance(p.dist) + ' away</div></div>' +
+            '</a>';
+        });
+        html += '</div></div>';
+      });
+
+      if (!anyResults) html = '<div class="info-empty">No restaurants or places to stay found nearby via OpenStreetMap.</div>';
+      html += '<div class="note-card">🌱 marks spots tagged vegetarian/vegan-friendly on OpenStreetMap. Michelin ratings, price tiers, and live booking availability come from licensed providers and aren\'t included here.</div>';
+
+      container.innerHTML = html;
+      cacheTab(key, 'food', container);
+    });
+  }
+
+  /* --------------------------------------------------------------
+     Transport tab
+     -------------------------------------------------------------- */
+  function loadTransportTab(container, loc, key) {
+    var lat = loc.lat, lon = loc.lon;
+    var q = '[out:json][timeout:20];(' +
+      'node["aeroway"="aerodrome"](around:60000,' + lat + ',' + lon + ');' +
+      'node["railway"="station"](around:15000,' + lat + ',' + lon + ');' +
+      'node["station"="subway"](around:14000,' + lat + ',' + lon + ');' +
+      'node["amenity"="bus_station"](around:8000,' + lat + ',' + lon + ');' +
+      'node["amenity"="taxi"](around:6000,' + lat + ',' + lon + ');' +
+      'node["amenity"="bicycle_rental"](around:6000,' + lat + ',' + lon + ');' +
+      'node["amenity"="charging_station"](around:9000,' + lat + ',' + lon + ');' +
+      ');out center 150;';
+
+    overpassFetch(q).then(function (elements) {
+      function dist(el) { return haversineKm(lat, lon, el.lat, el.lon); }
+      function nearestOfEach(pred) {
+        return elements.filter(pred).sort(function (a, b) { return dist(a) - dist(b); });
+      }
+
+      var airports = nearestOfEach(function (e) { return e.tags && e.tags.aeroway === 'aerodrome'; });
+      var metro = nearestOfEach(function (e) { return e.tags && e.tags.station === 'subway'; });
+      var rail = nearestOfEach(function (e) { return e.tags && e.tags.railway === 'station' && e.tags.station !== 'subway'; });
+      var bus = nearestOfEach(function (e) { return e.tags && e.tags.amenity === 'bus_station'; });
+      var taxi = nearestOfEach(function (e) { return e.tags && e.tags.amenity === 'taxi'; });
+      var bike = nearestOfEach(function (e) { return e.tags && e.tags.amenity === 'bicycle_rental'; });
+      var ev = nearestOfEach(function (e) { return e.tags && e.tags.amenity === 'charging_station'; });
+
+      var rows = [
+        { list: airports, type: 'Nearest Airport', icon: '✈️' },
+        { list: metro, type: 'Nearest Metro Station', icon: '🚇' },
+        { list: rail, type: 'Nearest Railway Station', icon: '🚆' },
+        { list: bus, type: 'Nearest Bus Station', icon: '🚌' },
+        { list: taxi, type: 'Nearest Taxi Stand', icon: '🚕' },
+        { list: bike, type: 'Nearest Bike Rental', icon: '🚲' },
+        { list: ev, type: 'Nearest EV Charging', icon: '🔌' }
+      ];
+
+      var html = '<div class="section-title"><span>Getting Around</span><span class="stitch"></span></div><div class="transport-list">';
+      var any = false;
+      rows.forEach(function (r) {
+        if (!r.list.length) return;
+        any = true;
+        var el = r.list[0];
+        var name = (el.tags && el.tags.name) || r.type.replace('Nearest ', '');
+        html += '<div class="transport-item"><div class="transport-icon">' + r.icon + '</div>' +
+          '<div class="transport-info"><div class="transport-type">' + r.type + '</div><div class="transport-name">' + escapeHtml(name) + '</div></div>' +
+          '<div class="transport-dist">' + formatDistance(dist(el)) + '</div></div>';
+      });
+      html += '</div>';
+      if (!any) html = '<div class="info-empty">No transport hubs found nearby via OpenStreetMap.</div>';
+
+      html += '<div class="section-title"><span>Not Available Here</span><span class="stitch"></span></div>' +
+        '<div class="note-card">Live traffic conditions, fuel prices, and real-time bus/metro arrivals need a paid mapping or transit-authority API (e.g. Google Maps, TomTom, or a local GTFS feed) — not wired up in this free build.</div>';
+
+      container.innerHTML = html;
+      cacheTab(key, 'transport', container);
+    });
+  }
+
+  /* --------------------------------------------------------------
+     More tab
+     -------------------------------------------------------------- */
+  function loadMoreTab(container, loc, key) {
+    Promise.all([
+      getEarthquakes(loc.lat, loc.lon),
+      getPublicHolidays(loc.countryCode),
+      getHistoricalExtremes(loc.lat, loc.lon),
+      getSpaceWeather()
+    ]).then(function (results) {
+      renderMoreTab(container, loc, results[0], results[1], results[2], results[3]);
+      cacheTab(key, 'more', container);
+      bindTabInteractions('more', container, loc);
+    });
+  }
+
+  function renderMoreTab(container, loc, quakes, holidays, extremes, sw) {
+    var html = '';
+
+    var tips = computeSmartTips(loc.weatherData, loc.aqiData);
+    html += '<div class="section-title"><span>Smart Tips</span><span class="stitch"></span></div>';
+    tips.forEach(function (t) {
+      html += '<div class="tip-card"><div class="tip-icon">' + t.icon + '</div><div class="tip-text">' + escapeHtml(t.text) + '</div></div>';
+    });
+    html += '<div class="note-card">Rule-based tips from the live weather data above — not a connected AI/LLM service.</div>';
+
+    // Space weather
+    html += '<div class="section-title"><span>Space Weather</span><span class="stitch"></span></div>';
+    if (sw) {
+      var kpColor = kpToColor(sw.kp);
+      html += '<div class="sw-row">' +
+        '<div class="sw-card"><div class="sw-label">Kp Index</div><div class="sw-value"><span class="kp-dot" style="background:' + kpColor + ';color:' + kpColor + '"></span>' + sw.kp.toFixed(1) + '</div></div>' +
+        '<div class="sw-card"><div class="sw-label">Solar Wind</div><div class="sw-value">' + (sw.windSpeed ? Math.round(sw.windSpeed) + '<span style="font-size:9px;color:var(--mist)"> km/s</span>' : '—') + '</div></div>' +
+        '<div class="sw-card"><div class="sw-label">Bz</div><div class="sw-value">' + (sw.bz !== null && sw.bz !== undefined ? sw.bz.toFixed(1) + '<span style="font-size:9px;color:var(--mist)"> nT</span>' : '—') + '</div></div>' +
+        '</div>';
+      var auroraChance = sw.kp >= 5 ? 'Storm — aurora likely at high latitudes' : sw.kp >= 4 ? 'Active — aurora possible at high latitudes' : 'Quiet — aurora unlikely';
+      html += '<div class="note-card">' + auroraChance + '. Live NOAA SWPC feed. Kp 5+ indicates a geomagnetic storm.</div>';
+    } else {
+      html += '<div class="info-empty">Space weather feed unavailable.</div>';
+    }
+
+    // ISS
+    html += '<div class="section-title"><span>International Space Station</span><span class="stitch"></span></div>';
+    if (issData) {
+      html += '<div class="iss-row">' +
+        '<div class="iss-icon">🛰</div>' +
+        '<div class="iss-info"><div class="iss-title">Live Position</div>' +
+        '<div class="iss-value">' + Math.abs(issData.latitude).toFixed(2) + '°' + (issData.latitude >= 0 ? 'N' : 'S') + ' · ' + Math.abs(issData.longitude).toFixed(2) + '°' + (issData.longitude >= 0 ? 'E' : 'W') + '</div>' +
+        '<div class="iss-stats">Altitude ' + Math.round(issData.altitude) + ' km · Speed ' + Math.round(issData.velocity) + ' km/h</div></div>' +
+        '</div>' +
+        '<div class="note-card">Enable the 🛰 toggle in the top bar to see the ISS moving on the globe.</div>';
+    } else {
+      html += '<div class="info-empty">ISS feed not loaded yet — enable the 🛰 tracker in the top bar.</div>';
+    }
+
+    // Earthquakes
+    html += '<div class="section-title"><span>Recent Nearby Earthquakes</span><span class="stitch"></span></div>';
+    if (quakes && quakes.length) {
+      quakes.forEach(function (q) {
+        var d = new Date(q.time);
+        html += '<div class="quake-item"><span class="quake-mag">M' + q.mag.toFixed(1) + '</span>' +
+          '<div class="quake-place">' + escapeHtml(q.place) + '</div>' +
+          '<div class="quake-time">' + d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) + '</div></div>';
+      });
+    } else {
+      html += '<div class="info-empty">No M3+ earthquakes within 300 km in the last 30 days (via USGS).</div>';
+    }
+
+    // Holidays
+    html += '<div class="section-title"><span>Upcoming Public Holidays</span><span class="stitch"></span></div>';
+    if (holidays && holidays.length) {
+      holidays.slice(0, 4).forEach(function (h) {
+        html += '<div class="holiday-item"><div class="poi-name">' + escapeHtml(h.name) + '</div><div class="poi-dist">' + h.date + '</div></div>';
+      });
+    } else {
+      html += '<div class="info-empty">No holiday data available for this country.</div>';
+    }
+
+    // Extremes
+    html += '<div class="section-title"><span>Historical Weather Extremes</span><span class="stitch"></span></div>';
+    if (extremes) {
+      html += '<div class="data-list">' +
+        dataRow('Hottest Day', Math.round(state.unit === 'C' ? extremes.hottest.value : cToF(extremes.hottest.value)) + '°' + state.unit + ' (' + extremes.hottest.date + ')') +
+        dataRow('Coldest Day', Math.round(state.unit === 'C' ? extremes.coldest.value : cToF(extremes.coldest.value)) + '°' + state.unit + ' (' + extremes.coldest.date + ')') +
+        dataRow('Rainiest Year', extremes.rainiestYear.year + ' — ' + formatNumber(extremes.rainiestYear.total) + ' mm') +
+        dataRow('Avg. Annual Rainfall', formatNumber(extremes.avgAnnualPrecip) + ' mm') +
+        '</div>' +
+        '<div class="note-card">Based on the ' + extremes.rangeStart + ' to ' + extremes.rangeEnd + ' Open&#8209;Meteo archive — not true all-time records.</div>';
+    } else {
+      html += '<div class="info-empty">Historical archive data unavailable for this location.</div>';
+    }
+
+    // Favorites
+    var favs = getFavorites();
+    html += '<div class="section-title"><span>Favorites</span><span class="stitch"></span></div>';
+    if (favs.length) {
+      html += '<div class="chip-scroll">';
+      favs.forEach(function (f) {
+        html += '<button class="chip has-results fav-chip" data-lat="' + f.lat + '" data-lon="' + f.lon + '" data-name="' + escapeHtml(f.name) + '">' + escapeHtml(f.name) + '</button>';
+      });
+      html += '</div>';
+    } else {
+      html += '<div class="info-empty">Tap the ☆ star next to a location\'s name to save it here.</div>';
+    }
+
+    html += '<div class="section-title"><span>Also Not Included</span><span class="stitch"></span></div>' +
+      '<div class="note-card">Live traffic, live flight tracking, hotel/restaurant pricing, crime index, GDP, satellite/drone/360° imagery, and true AI trip-planning all require paid or licensed APIs (Google Maps, Amadeus, an LLM provider, etc.) and a backend to hold the keys securely.</div>';
+
+    container.innerHTML = html;
+  }
+
+  function kpToColor(kp) {
+    if (kp >= 7) return '#f87171';
+    if (kp >= 5) return '#fb923c';
+    if (kp >= 4) return '#facc15';
+    if (kp >= 3) return '#4ade80';
+    return '#5eead4';
+  }
+
+  function computeSmartTips(weatherData, aqiData) {
+    var tips = [];
+    var current = weatherData && weatherData.current;
+    var daily = weatherData && weatherData.daily;
+    var rainProb = daily && daily.precipitation_probability_max ? daily.precipitation_probability_max[0] : null;
+    if (rainProb !== null && rainProb !== undefined && rainProb >= 40) {
+      tips.push({ icon: '☂️', text: 'Rain probability is ' + rainProb + '% today — worth carrying an umbrella.' });
+    }
+    var uv = daily && daily.uv_index_max ? daily.uv_index_max[0] : null;
+    if (uv !== null && uv !== undefined && uv >= 6) {
+      tips.push({ icon: '🧴', text: 'UV index peaks around ' + uv.toFixed(1) + ' — sunscreen and shade are worth it around midday.' });
+    }
+    var aqiVal = aqiData && aqiData.us_aqi;
+    if (aqiVal !== null && aqiVal !== undefined && aqiVal > 100) {
+      tips.push({ icon: '😷', text: 'Air quality is elevated (AQI ' + Math.round(aqiVal) + ') — sensitive groups should limit prolonged outdoor exertion.' });
+    }
+    var wind = current && current.wind_speed_10m;
+    if (wind !== null && wind !== undefined && wind >= 30) {
+      tips.push({ icon: '💨', text: 'Winds around ' + Math.round(wind) + ' km/h — secure loose items outdoors.' });
+    }
+    if (daily && daily.sunset && daily.sunset[0]) {
+      tips.push({ icon: '📷', text: 'Golden hour falls roughly in the hour before sunset (' + formatTimeFromIso(daily.sunset[0]) + ') — good light for photography.' });
+    }
+    if (!tips.length) tips.push({ icon: '✅', text: 'Conditions look calm and clear — a good day to be outside.' });
+    return tips;
+  }
+
+  function getEarthquakes(lat, lon) {
+    var end = new Date();
+    var start = new Date(end.getTime() - 30 * 86400000);
+    var url = 'https://earthquake.usgs.gov/fdsnws/event/1/query?format=geojson&latitude=' + lat + '&longitude=' + lon +
+      '&maxradiuskm=300&minmagnitude=3&orderby=time&limit=5&starttime=' + start.toISOString().slice(0, 10);
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !d.features) return [];
+      return d.features.map(function (f) {
+        return { mag: f.properties.mag, place: f.properties.place, time: f.properties.time };
+      });
+    }).catch(function () { return []; });
+  }
+
+  function getPublicHolidays(countryCode) {
+    if (!countryCode) return Promise.resolve([]);
+    var url = 'https://date.nager.at/api/v3/NextPublicHolidays/' + countryCode;
+    return fetch(url).then(function (r) { return r.ok ? r.json() : []; }).catch(function () { return []; });
+  }
+
+  function getHistoricalExtremes(lat, lon) {
+    var endDate = new Date();
+    endDate.setDate(endDate.getDate() - 3);
+    var startDate = new Date(endDate);
+    startDate.setFullYear(startDate.getFullYear() - 3);
+    function fmt(d) { return d.toISOString().slice(0, 10); }
+    var url = 'https://archive-api.open-meteo.com/v1/archive?latitude=' + lat + '&longitude=' + lon +
+      '&start_date=' + fmt(startDate) + '&end_date=' + fmt(endDate) +
+      '&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto';
+    return fetch(url).then(function (r) { return r.ok ? r.json() : null; }).then(function (d) {
+      if (!d || !d.daily || !d.daily.time || !d.daily.time.length) return null;
+      var maxT = -Infinity, maxDate = null, minT = Infinity, minDate = null, totalPrecip = 0;
+      var rainiestYear = {};
+      for (var i = 0; i < d.daily.time.length; i++) {
+        var tmax = d.daily.temperature_2m_max[i], tmin = d.daily.temperature_2m_min[i], p = d.daily.precipitation_sum[i] || 0;
+        if (tmax !== null && tmax > maxT) { maxT = tmax; maxDate = d.daily.time[i]; }
+        if (tmin !== null && tmin < minT) { minT = tmin; minDate = d.daily.time[i]; }
+        var year = d.daily.time[i].slice(0, 4);
+        rainiestYear[year] = (rainiestYear[year] || 0) + p;
+        totalPrecip += p;
+      }
+      var years = Object.keys(rainiestYear);
+      if (!years.length) return null;
+      var bestYear = years.reduce(function (a, b) { return rainiestYear[a] > rainiestYear[b] ? a : b; }, years[0]);
+      return {
+        hottest: { value: maxT, date: maxDate },
+        coldest: { value: minT, date: minDate },
+        rainiestYear: { year: bestYear, total: rainiestYear[bestYear] },
+        avgAnnualPrecip: totalPrecip / years.length,
+        rangeStart: fmt(startDate), rangeEnd: fmt(endDate)
+      };
+    }).catch(function () { return null; });
+  }
+
+  /* --------------------------------------------------------------
+     Space weather (NOAA SWPC)
+     -------------------------------------------------------------- */
+  function getSpaceWeather() {
+    var kpUrl = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json';
+    var plasmaUrl = 'https://services.swpc.noaa.gov/products/solar-wind/plasma-1-day.json';
+    var magUrl = 'https://services.swpc.noaa.gov/products/solar-wind/mag-1-day.json';
+
+    return Promise.all([
+      fetch(kpUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+      fetch(plasmaUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; }),
+      fetch(magUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; })
+    ]).then(function (res) {
+      var kpData = res[0], plasma = res[1], mag = res[2];
+      var result = { kp: 0, windSpeed: null, bz: null };
+      if (kpData && kpData.length > 1) {
+        var last = kpData[kpData.length - 1];
+        var kpVal = parseFloat(last[1]);
+        if (!isNaN(kpVal)) result.kp = kpVal;
+      }
+      if (plasma && plasma.length > 1) {
+        var lastP = plasma[plasma.length - 1];
+        var spd = parseFloat(lastP[2]);
+        if (!isNaN(spd)) result.windSpeed = spd;
+      }
+      if (mag && mag.length > 1) {
+        var lastM = mag[mag.length - 1];
+        var bz = parseFloat(lastM[3]);
+        if (!isNaN(bz)) result.bz = bz;
+      }
+      return result;
+    }).catch(function () { return null; });
+  }
+
+  /* --------------------------------------------------------------
+     ISS live tracking
+     -------------------------------------------------------------- */
+  var issFetchedAt = 0;
+  function fetchISS() {
+    if (Date.now() - issFetchedAt < 4000) return;
+    issFetchedAt = Date.now();
+    fetch('https://api.wheretheiss.at/v1/satellites/25544')
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d || d.latitude === undefined) return;
+        issData = d;
+        updateISSMarker();
+      })
+      .catch(function () {});
+  }
+
+  function updateISSMarker() {
+    if (!issData) return;
+    var local = latLonToVector3(issData.latitude, issData.longitude, EARTH_RADIUS * 1.03);
+    issGroup.position.copy(local);
+    var up = local.clone().normalize();
+    issGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), up);
+  }
+
+  setInterval(function () {
+    if (state.showISS && !state.paused) fetchISS();
+  }, 5000);
+
+  /* --------------------------------------------------------------
+     Coordinate readout (UTC)
+     -------------------------------------------------------------- */
+  setInterval(function () {
+    var now = new Date();
+    var utcEl = document.getElementById('crUtc');
+    var subEl = document.getElementById('crSub');
+    if (utcEl) {
+      var hh = String(now.getUTCHours()).padStart(2, '0');
+      var mm = String(now.getUTCMinutes()).padStart(2, '0');
+      utcEl.textContent = hh + ':' + mm + ' UTC';
+    }
+    if (subEl) {
+      var sub = getSubsolarPoint(now);
+      subEl.textContent = 'subsolar ' + Math.abs(sub.lat).toFixed(1) + '°' + (sub.lat >= 0 ? 'N' : 'S') +
+        ', ' + Math.abs(sub.lon).toFixed(1) + '°' + (sub.lon >= 0 ? 'E' : 'W');
+    }
+  }, 1000);
+
+  /* --------------------------------------------------------------
+     Main data fetch
+     -------------------------------------------------------------- */
+  function fetchLocationData(lat, lon, presetName, presetInfo) {
+    showPanelLoading();
+
+    var weatherUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
+      '&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,surface_pressure,cloud_cover,is_day' +
+      '&hourly=temperature_2m,precipitation_probability,weather_code,relative_humidity_2m,uv_index,visibility,dew_point_2m,wind_speed_10m,wind_direction_10m,cloud_cover,snowfall' +
+      '&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset,uv_index_max,snowfall_sum,wind_speed_10m_max' +
+      '&forecast_days=16&timezone=auto';
+    var aqiUrl = 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + lat + '&longitude=' + lon +
+      '&current=us_aqi,pm2_5,pm10,european_aqi,alder_pollen,birch_pollen,grass_pollen,mugwort_pollen,olive_pollen,ragweed_pollen&timezone=auto';
+    var geoUrl = 'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lon + '&localityLanguage=en';
+
+    var weatherPromise = fetch(weatherUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    var aqiPromise = fetch(aqiUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    var geoPromise = presetName ? Promise.resolve(null) : fetch(geoUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+
+    Promise.all([weatherPromise, aqiPromise, geoPromise]).then(function (results) {
+      var weatherData = results[0];
+      var aqiData = results[1];
+      var geoData = results[2];
+
+      if (!weatherData && !aqiData && !presetName && !geoData) {
+        showPanelError(lat, lon);
+        toast('Could not reach the weather network', 'err');
+        return;
+      }
+
+      var name = presetName;
+      var countryCode = presetInfo && presetInfo.countryCode;
+      var countryName = presetInfo && presetInfo.countryName;
+      var adminRegion = presetInfo && presetInfo.adminRegion;
+
+      if (!name) {
+        if (geoData) {
+          var city = geoData.city || geoData.locality;
+          countryName = geoData.countryName;
+          countryCode = geoData.countryCode;
+          adminRegion = geoData.principalSubdivision;
+          if (city && countryName) name = city + ', ' + countryName;
+          else if (countryName) name = countryName;
+          else name = 'Open Ocean';
+        } else {
+          name = 'Unnamed Point';
+        }
+      }
+
+      var loc = {
+        name: name,
+        lat: lat,
+        lon: lon,
+        cityQuery: name.split(',')[0].trim(),
+        countryCode: countryCode || null,
+        countryName: countryName || null,
+        adminRegion: adminRegion || null,
+        timezone: weatherData ? weatherData.timezone : null,
+        timezoneAbbr: weatherData ? weatherData.timezone_abbreviation : null,
+        localTime: (weatherData && weatherData.current && weatherData.current.time) ? weatherData.current.time.replace('T', ' ') : null
+      };
+
+      renderPanel(name, lat, lon, weatherData, aqiData ? aqiData.current : null, loc);
+
+      saveRecentSearch({ name: name, lat: lat, lon: lon });
+      updateHash(lat, lon, name);
+    });
+  }
+
+  function showPanelError(lat, lon) {
+    panelContentEl.innerHTML =
+      '<div class="p-eyebrow"><span class="dot"></span>LOCATION LOCK</div>' +
+      '<div class="p-title">' + formatCoord(lat, lon) + '</div>' +
+      '<div class="p-error">' +
+      '<div class="p-error-text">Signal lost. Could not reach the weather<br/>network for this point. Try another spot.</div>' +
+      '</div>';
+    openPanel();
+  }
+
+  /* --------------------------------------------------------------
+     Search
+     -------------------------------------------------------------- */
+  var searchInput = document.getElementById('searchInput');
+  var searchResultsEl = document.getElementById('searchResults');
+  var searchDebounce = null;
+  var searchHighlightIdx = -1;
+  var lastSearchResults = [];
+
+  searchInput.addEventListener('input', function () {
+    var q = searchInput.value.trim();
+    clearTimeout(searchDebounce);
+    searchHighlightIdx = -1;
+    if (q.length < 2) {
+      renderRecentSearches();
+      return;
+    }
+    searchDebounce = setTimeout(function () { runSearch(q); }, 320);
+  });
+
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      searchResultsEl.classList.add('hidden');
+      searchInput.blur();
+    } else if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      moveSearchHighlight(1);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      moveSearchHighlight(-1);
+    } else if (e.key === 'Enter') {
+      var items = searchResultsEl.querySelectorAll('.search-result-item');
+      var idx = searchHighlightIdx >= 0 ? searchHighlightIdx : (items.length ? 0 : -1);
+      if (idx >= 0 && items[idx]) items[idx].click();
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!searchResultsEl.contains(e.target) && e.target !== searchInput) {
+      searchResultsEl.classList.add('hidden');
+    }
+  });
+
+  function moveSearchHighlight(delta) {
+    var items = searchResultsEl.querySelectorAll('.search-result-item');
+    if (!items.length) return;
+    searchHighlightIdx += delta;
+    if (searchHighlightIdx < 0) searchHighlightIdx = items.length - 1;
+    if (searchHighlightIdx >= items.length) searchHighlightIdx = 0;
+    Array.prototype.forEach.call(items, function (it, i) {
+      it.classList.toggle('highlighted', i === searchHighlightIdx);
+    });
+    items[searchHighlightIdx].scrollIntoView({ block: 'nearest' });
+  }
+
+  function runSearch(query) {
+    var url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(query) + '&count=6&language=en&format=json';
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      var results = (data && data.results) || [];
+      lastSearchResults = results;
+      renderSearchResults(results);
+    }).catch(function () {
+      searchResultsEl.innerHTML = '<div class="search-result-empty">Search unavailable right now.</div>';
+      searchResultsEl.classList.remove('hidden');
+    });
+  }
+
+  function renderSearchResults(results) {
+    if (results.length === 0) {
+      searchResultsEl.innerHTML = '<div class="search-result-empty">No matches found.</div>';
+      searchResultsEl.classList.remove('hidden');
+      return;
+    }
+    var html = '';
+    results.forEach(function (r, i) {
+      var label = r.name;
+      var region = [r.admin1, r.country].filter(Boolean).join(', ');
+      html += '<div class="search-result-item" data-idx="' + i + '"><span>' + escapeHtml(label) + '</span><span class="sr-country">' + escapeHtml(region) + '</span></div>';
+    });
+    searchResultsEl.innerHTML = html;
+    searchResultsEl.classList.remove('hidden');
+    searchHighlightIdx = -1;
+
+    Array.prototype.forEach.call(searchResultsEl.querySelectorAll('.search-result-item'), function (el) {
+      el.addEventListener('click', function () {
+        var idx = parseInt(el.getAttribute('data-idx'), 10);
+        var r = results[idx];
+        selectSearchResult(r);
+      });
+    });
+  }
+
+  function renderRecentSearches() {
+    if (!state.recentSearches.length) {
+      searchResultsEl.classList.add('hidden');
+      return;
+    }
+    var html = '<div class="search-section-label">Recent</div><div class="recent-chip-row">';
+    state.recentSearches.forEach(function (r, i) {
+      html += '<span class="recent-chip" data-idx="' + i + '">' + escapeHtml(r.name) + '</span>';
+    });
+    html += '</div>';
+    searchResultsEl.innerHTML = html;
+    searchResultsEl.classList.remove('hidden');
+    Array.prototype.forEach.call(searchResultsEl.querySelectorAll('.recent-chip'), function (chip) {
+      chip.addEventListener('click', function () {
+        var idx = parseInt(chip.getAttribute('data-idx'), 10);
+        var r = state.recentSearches[idx];
+        searchInput.value = r.name;
+        searchResultsEl.classList.add('hidden');
+        hideHint();
+        var localPoint = latLonToVector3(r.lat, r.lon, EARTH_RADIUS);
+        placeMarker(localPoint);
+        state.rotationTarget = frontRotationFor(localPoint);
+        fetchLocationData(r.lat, r.lon, r.name, null);
+      });
+    });
+  }
+
+  searchInput.addEventListener('focus', function () {
+    if (!searchInput.value.trim()) renderRecentSearches();
+  });
+
+  function selectSearchResult(r) {
+    searchResultsEl.classList.add('hidden');
+    searchInput.value = r.name;
+    hideHint();
+
+    var localPoint = latLonToVector3(r.latitude, r.longitude, EARTH_RADIUS);
+    placeMarker(localPoint);
+    state.rotationTarget = frontRotationFor(localPoint);
+
+    var region = [r.admin1, r.country].filter(Boolean).join(', ');
+    var name = region ? r.name + ', ' + region : r.name;
+    var presetInfo = { countryCode: r.country_code || null, countryName: r.country || null, adminRegion: r.admin1 || null };
+    fetchLocationData(r.latitude, r.longitude, name, presetInfo);
+  }
+
+  /* --------------------------------------------------------------
+     Keyboard shortcuts
+     -------------------------------------------------------------- */
+  document.addEventListener('keydown', function (e) {
+    var tag = (e.target && e.target.tagName) || '';
+    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+    if (e.key === '/' ) {
+      e.preventDefault();
+      searchInput.focus();
+      searchInput.select();
+    } else if (e.key === 'Escape') {
+      if (state.panelOpen) closePanel();
+      else searchResultsEl.classList.add('hidden');
+    } else if (e.key === 'r' || e.key === 'R') {
+      state.autoRotate = !state.autoRotate;
+      syncRotateBtn();
+    } else if (e.key === 'g' || e.key === 'G') {
+      gridToggleBtn.click();
+    } else if (e.key === 'i' || e.key === 'I') {
+      issToggleBtn.click();
+    } else if (e.key === 'f' || e.key === 'F') {
+      flightToggleBtn.click();
+    } else if (e.key === 's' || e.key === 'S') {
+      toggleSoundscape();
+    }
+  });
+
+  /* --------------------------------------------------------------
+     Boot
+     -------------------------------------------------------------- */
+  function boot() {
+    var initial = parseHash();
+    if (initial) {
+      hideHint();
+      setTimeout(function () {
+        var localPoint = latLonToVector3(initial.lat, initial.lon, EARTH_RADIUS);
+        placeMarker(localPoint);
+        state.rotationTarget = frontRotationFor(localPoint);
+        fetchLocationData(initial.lat, initial.lon, initial.name, null);
+      }, 700);
+    }
+  }
+  boot();
+
+})();
+</script>
+</body>
+</html>

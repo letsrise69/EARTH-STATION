@@ -1,0 +1,1116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Earth Station — Live Atmospheric Readout</title>
+<meta name="description" content="A realistic rotating 3D Earth. Tap anywhere to read live temperature, humidity and air quality." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --void:#04060b;
+    --deep:#0a1120;
+    --panel:#0c1424;
+    --cyan:#5eead4;
+    --cyan-dim:rgba(94,234,212,0.35);
+    --amber:#f5a94e;
+    --amber-dim:rgba(245,169,78,0.35);
+    --ink:#e8edf6;
+    --mist:#7d8aa3;
+    --line:rgba(125,138,163,0.18);
+    --radius:14px;
+    --font-display:'Space Grotesk', sans-serif;
+    --font-mono:'JetBrains Mono', monospace;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:var(--void);
+    color:var(--ink);
+    font-family:var(--font-display);
+    overflow:hidden;
+    -webkit-tap-highlight-color:transparent;
+  }
+
+  #bg-gradient{
+    position:fixed; inset:0;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 38%, rgba(30,58,95,0.35), transparent 60%),
+      radial-gradient(ellipse 120% 100% at 50% 100%, rgba(8,12,22,0.9), var(--void) 70%);
+    pointer-events:none;
+    z-index:0;
+  }
+
+  #canvas-container{
+    position:fixed; inset:0;
+    z-index:1;
+    cursor:grab;
+  }
+  #canvas-container.dragging{ cursor:grabbing; }
+  #canvas-container canvas{ display:block; touch-action:none; }
+
+  /* ---------- HUD corner brackets ---------- */
+  .hud-corner{
+    position:fixed;
+    width:26px; height:26px;
+    border:1.5px solid var(--cyan-dim);
+    z-index:5;
+    pointer-events:none;
+    opacity:0.8;
+  }
+  .hud-corner.tl{ top:18px; left:18px; border-right:none; border-bottom:none; }
+  .hud-corner.tr{ top:18px; right:18px; border-left:none; border-bottom:none; }
+  .hud-corner.bl{ bottom:18px; left:18px; border-right:none; border-top:none; }
+  .hud-corner.br{ bottom:18px; right:18px; border-left:none; border-top:none; }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    position:fixed; top:0; left:0; right:0;
+    z-index:10;
+    display:flex; align-items:flex-start; justify-content:space-between;
+    padding:28px 44px 0 44px;
+    pointer-events:none;
+  }
+  .topbar > *{ pointer-events:auto; }
+
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{
+    color:var(--amber);
+    font-size:20px;
+    line-height:1;
+    text-shadow:0 0 14px var(--amber-dim);
+  }
+  .brand-text{ display:flex; flex-direction:column; gap:3px; }
+  .brand-title{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:15px;
+    letter-spacing:0.18em;
+    color:var(--ink);
+  }
+  .brand-sub{
+    font-family:var(--font-mono);
+    font-size:10.5px;
+    letter-spacing:0.08em;
+    color:var(--mist);
+    text-transform:uppercase;
+  }
+
+  .controls{ display:flex; align-items:flex-start; gap:10px; }
+
+  .search-wrap{ position:relative; width:250px; }
+  #searchInput{
+    width:100%;
+    background:rgba(10,17,32,0.72);
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:11px 14px;
+    color:var(--ink);
+    font-family:var(--font-mono);
+    font-size:12.5px;
+    letter-spacing:0.02em;
+    outline:none;
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    transition:border-color 0.2s ease;
+  }
+  #searchInput::placeholder{ color:var(--mist); }
+  #searchInput:focus{ border-color:var(--cyan-dim); }
+
+  .search-results{
+    position:absolute; top:calc(100% + 8px); left:0; right:0;
+    background:rgba(10,16,30,0.92);
+    border:1px solid var(--line);
+    border-radius:10px;
+    overflow:hidden;
+    backdrop-filter:blur(16px);
+    -webkit-backdrop-filter:blur(16px);
+    max-height:260px; overflow-y:auto;
+  }
+  .search-results.hidden{ display:none; }
+  .search-result-item{
+    padding:10px 14px;
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--ink);
+    cursor:pointer;
+    border-bottom:1px solid var(--line);
+    display:flex; justify-content:space-between; gap:8px;
+  }
+  .search-result-item:last-child{ border-bottom:none; }
+  .search-result-item:hover{ background:rgba(94,234,212,0.08); }
+  .search-result-item .sr-country{ color:var(--mist); white-space:nowrap; }
+  .search-result-empty{
+    padding:12px 14px; font-family:var(--font-mono); font-size:12px; color:var(--mist);
+  }
+
+  .icon-btn{
+    width:38px; height:38px;
+    display:flex; align-items:center; justify-content:center;
+    background:rgba(10,17,32,0.72);
+    border:1px solid var(--line);
+    border-radius:10px;
+    color:var(--cyan);
+    font-size:16px;
+    cursor:pointer;
+    backdrop-filter:blur(12px);
+    -webkit-backdrop-filter:blur(12px);
+    transition:border-color 0.2s ease, color 0.2s ease, transform 0.15s ease;
+  }
+  .icon-btn:hover{ border-color:var(--cyan-dim); }
+  .icon-btn:active{ transform:scale(0.94); }
+  .icon-btn.paused{ color:var(--mist); }
+
+  /* ---------- Hint ---------- */
+  .hint{
+    position:fixed; bottom:36px; left:50%;
+    transform:translateX(-50%);
+    z-index:6;
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.16em;
+    color:var(--mist);
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:10px;
+    transition:opacity 0.6s ease;
+    pointer-events:none;
+  }
+  .hint::before, .hint::after{
+    content:'';
+    width:22px; height:1px;
+    background:var(--line);
+  }
+  .hint.faded{ opacity:0; }
+
+  /* ---------- Loading ---------- */
+  .loading{
+    position:fixed; inset:0; z-index:50;
+    background:var(--void);
+    display:flex; align-items:center; justify-content:center;
+    transition:opacity 0.6s ease, visibility 0.6s ease;
+  }
+  .loading.hidden{ opacity:0; visibility:hidden; pointer-events:none; }
+  .loading-inner{ display:flex; flex-direction:column; align-items:center; gap:18px; }
+  .spinner{
+    width:34px; height:34px;
+    border-radius:50%;
+    border:2px solid var(--line);
+    border-top-color:var(--cyan);
+    animation:spin 0.9s linear infinite;
+  }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+  .loading-text{
+    font-family:var(--font-mono);
+    font-size:11px;
+    letter-spacing:0.2em;
+    color:var(--mist);
+    text-transform:uppercase;
+  }
+
+  /* ---------- Panel ---------- */
+  .panel{
+    position:fixed;
+    top:0; right:0;
+    width:360px; height:100%;
+    z-index:20;
+    background:rgba(9,14,26,0.82);
+    border-left:1px solid var(--line);
+    backdrop-filter:blur(22px);
+    -webkit-backdrop-filter:blur(22px);
+    transform:translateX(100%);
+    transition:transform 0.45s cubic-bezier(0.19,1,0.22,1);
+    overflow-y:auto;
+  }
+  .panel.visible{ transform:translateX(0); }
+
+  .panel-close{
+    position:absolute; top:20px; right:20px;
+    width:30px; height:30px;
+    border:1px solid var(--line);
+    border-radius:8px;
+    background:rgba(10,17,32,0.6);
+    color:var(--mist);
+    font-size:16px;
+    line-height:1;
+    cursor:pointer;
+    z-index:2;
+  }
+  .panel-close:hover{ color:var(--ink); border-color:var(--cyan-dim); }
+
+  .panel-content{ padding:76px 26px 32px 26px; }
+
+  .p-eyebrow{
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.2em;
+    color:var(--cyan);
+    text-transform:uppercase;
+    display:flex; align-items:center; gap:8px;
+    margin-bottom:10px;
+  }
+  .p-eyebrow .dot{
+    width:6px; height:6px; border-radius:50%;
+    background:var(--cyan);
+    box-shadow:0 0 8px var(--cyan);
+  }
+
+  .p-title{
+    font-family:var(--font-display);
+    font-weight:600;
+    font-size:22px;
+    line-height:1.25;
+    margin:0 0 8px 0;
+  }
+  .p-coords{
+    font-family:var(--font-mono);
+    font-size:12px;
+    color:var(--mist);
+    letter-spacing:0.03em;
+  }
+
+  .p-divider{ height:1px; background:var(--line); margin:22px 0; }
+
+  .p-temp-row{ display:flex; align-items:flex-end; justify-content:space-between; }
+  .p-temp{
+    font-family:var(--font-mono);
+    font-weight:600;
+    font-size:52px;
+    line-height:1;
+    letter-spacing:-0.01em;
+  }
+  .p-temp-unit{
+    font-size:22px;
+    color:var(--mist);
+    cursor:pointer;
+    user-select:none;
+    border-bottom:1px dashed var(--mist);
+  }
+  .p-cond{ text-align:right; }
+  .p-cond-icon{ font-size:30px; line-height:1; }
+  .p-cond-label{
+    font-family:var(--font-mono);
+    font-size:11px;
+    color:var(--mist);
+    margin-top:4px;
+    max-width:120px;
+  }
+  .p-feels{
+    font-family:var(--font-mono);
+    font-size:11.5px;
+    color:var(--mist);
+    margin-top:10px;
+    letter-spacing:0.02em;
+  }
+
+  .stat-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:10px;
+    margin-top:22px;
+  }
+  .stat-card{
+    border:1px solid var(--line);
+    border-radius:10px;
+    padding:12px 14px;
+    background:rgba(255,255,255,0.015);
+  }
+  .stat-label{
+    display:flex; align-items:center; gap:6px;
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.14em;
+    color:var(--mist);
+    text-transform:uppercase;
+    margin-bottom:8px;
+  }
+  .stat-value{
+    font-family:var(--font-mono);
+    font-size:19px;
+    font-weight:600;
+  }
+
+  .aqi-block{ margin-top:22px; }
+  .aqi-head{
+    display:flex; justify-content:space-between; align-items:baseline;
+    margin-bottom:10px;
+  }
+  .aqi-label{
+    font-family:var(--font-mono);
+    font-size:9.5px;
+    letter-spacing:0.14em;
+    color:var(--mist);
+    text-transform:uppercase;
+  }
+  .aqi-value-wrap{ display:flex; align-items:baseline; gap:8px; }
+  .aqi-value{ font-family:var(--font-mono); font-size:19px; font-weight:600; }
+  .aqi-tag{
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.05em;
+    padding:2px 8px;
+    border-radius:20px;
+    text-transform:uppercase;
+  }
+  .aqi-bar-track{
+    height:6px; border-radius:4px;
+    background:rgba(255,255,255,0.06);
+    overflow:hidden;
+  }
+  .aqi-bar-fill{
+    height:100%; border-radius:4px;
+    transition:width 0.6s ease;
+  }
+
+  .p-footer{
+    margin-top:28px;
+    padding-top:16px;
+    border-top:1px solid var(--line);
+    font-family:var(--font-mono);
+    font-size:10px;
+    letter-spacing:0.04em;
+    color:var(--mist);
+    line-height:1.6;
+  }
+  .p-footer a{ color:var(--mist); }
+
+  .p-loading, .p-error{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; padding:60px 10px;
+    text-align:center;
+  }
+  .p-error-text{
+    font-family:var(--font-mono); font-size:12px; color:var(--mist); line-height:1.6;
+  }
+
+  /* ---------- Responsive ---------- */
+  @media (max-width:720px){
+    .topbar{ flex-direction:column; padding:20px 18px 0 18px; gap:12px; }
+    .controls{ width:100%; }
+    .search-wrap{ flex:1; width:auto; }
+    .brand{ align-self:flex-start; }
+    .hud-corner{ display:none; }
+    .panel{
+      top:auto; bottom:0; left:0; right:0;
+      width:100%; height:auto; max-height:72vh;
+      border-left:none; border-top:1px solid var(--line);
+      border-radius:20px 20px 0 0;
+      transform:translateY(100%);
+    }
+    .panel.visible{ transform:translateY(0); }
+    .panel-content{ padding:56px 20px 34px 20px; }
+    .hint{ bottom:20px; font-size:10px; text-align:center; padding:0 20px; }
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .spinner{ animation:none; }
+  }
+</style>
+</head>
+<body>
+
+  <div id="bg-gradient"></div>
+  <div id="canvas-container"></div>
+
+  <div class="hud-corner tl"></div>
+  <div class="hud-corner tr"></div>
+  <div class="hud-corner bl"></div>
+  <div class="hud-corner br"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">◇</span>
+      <div class="brand-text">
+        <span class="brand-title">EARTH STATION</span>
+        <span class="brand-sub">live atmospheric readout</span>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="search-wrap">
+        <input id="searchInput" type="text" placeholder="Search a place…" autocomplete="off" spellcheck="false" />
+        <div id="searchResults" class="search-results hidden"></div>
+      </div>
+      <button id="rotateToggle" class="icon-btn" title="Pause rotation" aria-label="Toggle auto-rotation">⟳</button>
+    </div>
+  </header>
+
+  <div id="hint" class="hint">Tap anywhere on Earth to read conditions</div>
+
+  <div id="loading" class="loading">
+    <div class="loading-inner">
+      <div class="spinner"></div>
+      <span class="loading-text">Calibrating sensors…</span>
+    </div>
+  </div>
+
+  <aside id="panel" class="panel">
+    <button id="panelClose" class="panel-close" aria-label="Close">×</button>
+    <div id="panelContent" class="panel-content"></div>
+  </aside>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+  <script>
+/* ==========================================================================
+   EARTH STATION — rotating realistic globe with live weather / AQI readout
+   ========================================================================== */
+
+(function () {
+  'use strict';
+
+  var EARTH_RADIUS = 5;
+  var ROTATE_SPEED = 0.0011;
+  var prefersReducedMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  var TEXTURES = {
+    map: 'https://threejs.org/examples/textures/planets/earth_atmos_2048.jpg',
+    normal: 'https://threejs.org/examples/textures/planets/earth_normal_2048.jpg',
+    specular: 'https://threejs.org/examples/textures/planets/earth_specular_2048.jpg',
+    clouds: 'https://threejs.org/examples/textures/planets/earth_clouds_1024.png'
+  };
+
+  var WEATHER_CODES = {
+    0: ['Clear sky', '☀️'], 1: ['Mainly clear', '🌤️'], 2: ['Partly cloudy', '⛅'], 3: ['Overcast', '☁️'],
+    45: ['Fog', '🌫️'], 48: ['Rime fog', '🌫️'],
+    51: ['Light drizzle', '🌦️'], 53: ['Drizzle', '🌦️'], 55: ['Dense drizzle', '🌧️'],
+    56: ['Freezing drizzle', '🌧️'], 57: ['Dense freezing drizzle', '🌧️'],
+    61: ['Slight rain', '🌦️'], 63: ['Rain', '🌧️'], 65: ['Heavy rain', '🌧️'],
+    66: ['Freezing rain', '🌧️'], 67: ['Heavy freezing rain', '🌨️'],
+    71: ['Slight snow', '🌨️'], 73: ['Snow', '🌨️'], 75: ['Heavy snow', '❄️'], 77: ['Snow grains', '❄️'],
+    80: ['Rain showers', '🌦️'], 81: ['Rain showers', '🌧️'], 82: ['Violent showers', '⛈️'],
+    85: ['Snow showers', '🌨️'], 86: ['Heavy snow showers', '❄️'],
+    95: ['Thunderstorm', '⛈️'], 96: ['Thunderstorm, hail', '⛈️'], 99: ['Severe thunderstorm', '⛈️']
+  };
+
+  /* ---------------------------------------------------------------------
+     Scene setup
+     --------------------------------------------------------------------- */
+
+  var container = document.getElementById('canvas-container');
+  var scene = new THREE.Scene();
+  var camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 2000);
+  camera.position.set(0, 0, 13.5);
+
+  var renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  container.appendChild(renderer.domElement);
+
+  var ambient = new THREE.AmbientLight(0x3a4a6b, 1.6);
+  scene.add(ambient);
+
+  var sunLight = new THREE.DirectionalLight(0xffffff, 1.15);
+  sunLight.position.set(6, 2.5, 5);
+  scene.add(sunLight);
+
+  var loadManager = new THREE.LoadingManager();
+  loadManager.onLoad = function () {
+    var loadingEl = document.getElementById('loading');
+    loadingEl.classList.add('hidden');
+  };
+  var textureLoader = new THREE.TextureLoader(loadManager);
+  textureLoader.crossOrigin = 'anonymous';
+
+  function fallbackEarthTexture() {
+    var canvas = document.createElement('canvas');
+    canvas.width = 1024;
+    canvas.height = 512;
+    var ctx = canvas.getContext('2d');
+    var grad = ctx.createLinearGradient(0, 0, 0, 512);
+    grad.addColorStop(0, '#0c3d68');
+    grad.addColorStop(1, '#0a2c4d');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, 1024, 512);
+    ctx.fillStyle = '#2f6b3a';
+    for (var i = 0; i < 46; i++) {
+      var x = Math.random() * 1024, y = Math.random() * 512, r = 26 + Math.random() * 70;
+      ctx.beginPath();
+      ctx.ellipse(x, y, r, r * 0.55, Math.random() * Math.PI, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return new THREE.CanvasTexture(canvas);
+  }
+
+  var earthMaterial = new THREE.MeshPhongMaterial({
+    specular: new THREE.Color(0x252b36),
+    shininess: 9
+  });
+
+  textureLoader.load(TEXTURES.map, function (tex) {
+    earthMaterial.map = tex;
+    earthMaterial.needsUpdate = true;
+  }, undefined, function () {
+    earthMaterial.map = fallbackEarthTexture();
+    earthMaterial.needsUpdate = true;
+  });
+  textureLoader.load(TEXTURES.normal, function (tex) {
+    earthMaterial.normalMap = tex;
+    earthMaterial.normalScale = new THREE.Vector2(0.7, 0.7);
+    earthMaterial.needsUpdate = true;
+  }, undefined, function () {});
+  textureLoader.load(TEXTURES.specular, function (tex) {
+    earthMaterial.specularMap = tex;
+    earthMaterial.needsUpdate = true;
+  }, undefined, function () {});
+
+  var earthGeometry = new THREE.SphereGeometry(EARTH_RADIUS, 96, 96);
+  var earth = new THREE.Mesh(earthGeometry, earthMaterial);
+  scene.add(earth);
+
+  var cloudMaterial = new THREE.MeshPhongMaterial({
+    transparent: true,
+    opacity: 0.32,
+    depthWrite: false
+  });
+  textureLoader.load(TEXTURES.clouds, function (tex) {
+    cloudMaterial.map = tex;
+    cloudMaterial.needsUpdate = true;
+  }, undefined, function () {});
+  var cloudGeometry = new THREE.SphereGeometry(EARTH_RADIUS * 1.012, 96, 96);
+  var clouds = new THREE.Mesh(cloudGeometry, cloudMaterial);
+  scene.add(clouds);
+
+  // Fresnel-style atmosphere glow
+  var atmosphereMaterial = new THREE.ShaderMaterial({
+    vertexShader: [
+      'varying vec3 vNormal;',
+      'void main() {',
+      '  vNormal = normalize(normalMatrix * normal);',
+      '  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);',
+      '}'
+    ].join('\n'),
+    fragmentShader: [
+      'varying vec3 vNormal;',
+      'void main() {',
+      '  float intensity = pow(0.62 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 3.2);',
+      '  gl_FragColor = vec4(0.36, 0.72, 0.95, 1.0) * intensity;',
+      '}'
+    ].join('\n'),
+    blending: THREE.AdditiveBlending,
+    side: THREE.BackSide,
+    transparent: true
+  });
+  var atmosphere = new THREE.Mesh(new THREE.SphereGeometry(EARTH_RADIUS * 1.16, 64, 64), atmosphereMaterial);
+  scene.add(atmosphere);
+
+  // Starfield
+  (function createStars() {
+    var count = 7000;
+    var positions = new Float32Array(count * 3);
+    for (var i = 0; i < count; i++) {
+      var r = 260 + Math.random() * 500;
+      var theta = Math.random() * Math.PI * 2;
+      var phi = Math.acos((Math.random() * 2) - 1);
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    var mat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.1, sizeAttenuation: true });
+    scene.add(new THREE.Points(geo, mat));
+  })();
+
+  var controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.08;
+  controls.minDistance = 7.2;
+  controls.maxDistance = 26;
+  controls.enablePan = false;
+  controls.rotateSpeed = 0.55;
+  controls.autoRotate = false; // we rotate the earth mesh itself instead
+
+  /* ---------------------------------------------------------------------
+     State
+     --------------------------------------------------------------------- */
+
+  var state = {
+    autoRotate: !prefersReducedMotion,
+    panelOpen: false,
+    dragging: false,
+    rotationTarget: null,
+    markerGroup: null,
+    markerPlacedAt: 0,
+    unit: 'C',
+    lastWeather: null
+  };
+
+  var clock = new THREE.Clock();
+
+  /* ---------------------------------------------------------------------
+     Coordinate conversion
+     --------------------------------------------------------------------- */
+
+  function latLonToVector3(lat, lon, radius) {
+    var phi = (90 - lat) * (Math.PI / 180);
+    var theta = (lon + 180) * (Math.PI / 180);
+    var x = -(radius * Math.sin(phi) * Math.cos(theta));
+    var z = radius * Math.sin(phi) * Math.sin(theta);
+    var y = radius * Math.cos(phi);
+    return new THREE.Vector3(x, y, z);
+  }
+
+  function vector3ToLatLon(v, radius) {
+    var phi = Math.acos(Math.max(-1, Math.min(1, v.y / radius)));
+    var theta = Math.atan2(v.z, -v.x);
+    var lat = 90 - (phi * 180 / Math.PI);
+    var lon = (theta * 180 / Math.PI) - 180;
+    if (lon < -180) lon += 360;
+    if (lon > 180) lon -= 360;
+    return { lat: lat, lon: lon };
+  }
+
+  function shortestAngleDiff(a, b) {
+    var diff = (b - a) % (Math.PI * 2);
+    if (diff > Math.PI) diff -= Math.PI * 2;
+    if (diff < -Math.PI) diff += Math.PI * 2;
+    return diff;
+  }
+
+  function frontRotationFor(localPoint) {
+    return Math.atan2(-localPoint.x, localPoint.z);
+  }
+
+  /* ---------------------------------------------------------------------
+     Marker / target-lock reticle
+     --------------------------------------------------------------------- */
+
+  function clearMarker() {
+    if (state.markerGroup) {
+      earth.remove(state.markerGroup);
+      state.markerGroup.traverse(function (obj) {
+        if (obj.geometry) obj.geometry.dispose();
+        if (obj.material) obj.material.dispose();
+      });
+      state.markerGroup = null;
+    }
+  }
+
+  function placeMarker(localPoint) {
+    clearMarker();
+    var normal = localPoint.clone().normalize();
+    var group = new THREE.Group();
+    group.position.copy(normal.clone().multiplyScalar(EARTH_RADIUS * 1.006));
+    group.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), normal);
+
+    var core = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 16, 16),
+      new THREE.MeshBasicMaterial({ color: 0xf5a94e })
+    );
+    group.add(core);
+
+    var ring = new THREE.Mesh(
+      new THREE.RingGeometry(0.14, 0.165, 48),
+      new THREE.MeshBasicMaterial({ color: 0xf5a94e, transparent: true, opacity: 0.9, side: THREE.DoubleSide })
+    );
+    group.add(ring);
+    group.userData.ring = ring;
+
+    var staticRing = new THREE.Mesh(
+      new THREE.RingGeometry(0.09, 0.1, 48),
+      new THREE.MeshBasicMaterial({ color: 0x5eead4, transparent: true, opacity: 0.7, side: THREE.DoubleSide })
+    );
+    group.add(staticRing);
+
+    earth.add(group);
+    state.markerGroup = group;
+    state.markerPlacedAt = clock.getElapsedTime();
+  }
+
+  function updateMarkerPulse() {
+    if (!state.markerGroup || prefersReducedMotion) return;
+    var t = (clock.getElapsedTime() - state.markerPlacedAt) % 1.6;
+    var progress = t / 1.6;
+    var scale = 1 + progress * 2.1;
+    var ring = state.markerGroup.userData.ring;
+    ring.scale.set(scale, scale, scale);
+    ring.material.opacity = Math.max(0, 0.9 * (1 - progress));
+  }
+
+  /* ---------------------------------------------------------------------
+     Animation loop
+     --------------------------------------------------------------------- */
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    if (state.rotationTarget !== null) {
+      var diff = shortestAngleDiff(earth.rotation.y, state.rotationTarget);
+      if (Math.abs(diff) > 0.002) {
+        var step = diff * 0.06;
+        earth.rotation.y += step;
+        clouds.rotation.y += step;
+      } else {
+        earth.rotation.y = state.rotationTarget;
+        state.rotationTarget = null;
+      }
+    } else if (state.autoRotate && !state.panelOpen && !state.dragging) {
+      earth.rotation.y += ROTATE_SPEED;
+      clouds.rotation.y += ROTATE_SPEED * 1.15;
+    } else {
+      clouds.rotation.y += ROTATE_SPEED * 0.15;
+    }
+
+    updateMarkerPulse();
+    controls.update();
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  window.addEventListener('resize', function () {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  /* ---------------------------------------------------------------------
+     Pointer interaction: distinguish tap from drag
+     --------------------------------------------------------------------- */
+
+  var raycaster = new THREE.Raycaster();
+  var pointerVec = new THREE.Vector2();
+  var downPos = null;
+
+  renderer.domElement.addEventListener('pointerdown', function (e) {
+    downPos = { x: e.clientX, y: e.clientY };
+    state.dragging = false;
+  });
+
+  renderer.domElement.addEventListener('pointermove', function (e) {
+    if (downPos) {
+      var dx = e.clientX - downPos.x, dy = e.clientY - downPos.y;
+      if (Math.sqrt(dx * dx + dy * dy) > 6) {
+        state.dragging = true;
+        container.classList.add('dragging');
+      }
+    }
+  });
+
+  window.addEventListener('pointerup', function (e) {
+    if (!downPos) return;
+    var dx = e.clientX - downPos.x, dy = e.clientY - downPos.y;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    downPos = null;
+    container.classList.remove('dragging');
+    if (dist < 6) {
+      handleTap(e.clientX, e.clientY);
+    }
+    setTimeout(function () { state.dragging = false; }, 50);
+  });
+
+  function handleTap(clientX, clientY) {
+    var rect = renderer.domElement.getBoundingClientRect();
+    pointerVec.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+    pointerVec.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(pointerVec, camera);
+    var hits = raycaster.intersectObject(earth, false);
+    if (hits.length === 0) return;
+    var worldPoint = hits[0].point;
+    var localPoint = earth.worldToLocal(worldPoint.clone());
+    var geo = vector3ToLatLon(localPoint, EARTH_RADIUS);
+    placeMarker(localPoint);
+    hideHint();
+    fetchLocationData(geo.lat, geo.lon, null);
+  }
+
+  /* ---------------------------------------------------------------------
+     Hint fade
+     --------------------------------------------------------------------- */
+
+  function hideHint() {
+    var hint = document.getElementById('hint');
+    if (hint && !hint.classList.contains('faded')) hint.classList.add('faded');
+  }
+
+  /* ---------------------------------------------------------------------
+     Rotate-toggle button
+     --------------------------------------------------------------------- */
+
+  var rotateBtn = document.getElementById('rotateToggle');
+  function syncRotateBtn() {
+    rotateBtn.textContent = state.autoRotate ? '⟳' : '⏸';
+    rotateBtn.classList.toggle('paused', !state.autoRotate);
+    rotateBtn.title = state.autoRotate ? 'Pause rotation' : 'Resume rotation';
+  }
+  syncRotateBtn();
+  rotateBtn.addEventListener('click', function () {
+    state.autoRotate = !state.autoRotate;
+    syncRotateBtn();
+  });
+
+  /* ---------------------------------------------------------------------
+     Panel
+     --------------------------------------------------------------------- */
+
+  var panelEl = document.getElementById('panel');
+  var panelContentEl = document.getElementById('panelContent');
+  var panelCloseEl = document.getElementById('panelClose');
+
+  function openPanel() {
+    state.panelOpen = true;
+    panelEl.classList.add('visible');
+  }
+  function closePanel() {
+    state.panelOpen = false;
+    panelEl.classList.remove('visible');
+    clearMarker();
+  }
+  panelCloseEl.addEventListener('click', closePanel);
+
+  function showPanelLoading() {
+    panelContentEl.innerHTML =
+      '<div class="p-loading">' +
+      '<div class="spinner"></div>' +
+      '<span class="loading-text" style="font-size:10.5px;">Reading sensors…</span>' +
+      '</div>';
+    openPanel();
+  }
+
+  function showPanelError(lat, lon) {
+    panelContentEl.innerHTML =
+      '<div class="p-eyebrow"><span class="dot"></span>LOCATION LOCK</div>' +
+      '<div class="p-title">' + formatCoord(lat, lon) + '</div>' +
+      '<div class="p-error">' +
+      '<div class="p-error-text">Signal lost. Could not reach the weather<br/>network for this point. Try another spot.</div>' +
+      '</div>';
+  }
+
+  function formatCoord(lat, lon) {
+    var latDir = lat >= 0 ? 'N' : 'S';
+    var lonDir = lon >= 0 ? 'E' : 'W';
+    return Math.abs(lat).toFixed(2) + '°' + latDir + '  ' + Math.abs(lon).toFixed(2) + '°' + lonDir;
+  }
+
+  function aqiCategory(aqi) {
+    if (aqi <= 50) return { label: 'Good', color: '#4ade80' };
+    if (aqi <= 100) return { label: 'Moderate', color: '#facc15' };
+    if (aqi <= 150) return { label: 'Unhealthy (Sensitive)', color: '#fb923c' };
+    if (aqi <= 200) return { label: 'Unhealthy', color: '#f87171' };
+    if (aqi <= 300) return { label: 'Very Unhealthy', color: '#c084fc' };
+    return { label: 'Hazardous', color: '#991b1b' };
+  }
+
+  function cToF(c) { return (c * 9 / 5) + 32; }
+
+  function renderPanel(placeName, lat, lon, weather, aqi) {
+    state.lastWeather = weather;
+
+    var wcode = weather && weather.weather_code !== undefined ? weather.weather_code : null;
+    var wInfo = WEATHER_CODES[wcode] || ['Conditions unavailable', '🛰️'];
+
+    var tempC = weather ? weather.temperature_2m : null;
+    var feelsC = weather ? weather.apparent_temperature : null;
+    var humidity = weather ? weather.relative_humidity_2m : null;
+    var wind = weather ? weather.wind_speed_10m : null;
+    var pressure = weather ? weather.surface_pressure : null;
+
+    var aqiValue = aqi && aqi.us_aqi !== undefined && aqi.us_aqi !== null ? Math.round(aqi.us_aqi) : null;
+    var aqiCat = aqiValue !== null ? aqiCategory(aqiValue) : null;
+
+    var eyebrow = '<div class="p-eyebrow"><span class="dot"></span>LOCATION LOCK</div>';
+    var title = '<div class="p-title">' + escapeHtml(placeName || 'Unnamed Point') + '</div>';
+    var coords = '<div class="p-coords">' + formatCoord(lat, lon) + '</div>';
+
+    var tempDisplay = tempC === null || tempC === undefined ? '—' :
+      Math.round(state.unit === 'C' ? tempC : cToF(tempC));
+    var feelsDisplay = feelsC === null || feelsC === undefined ? null :
+      Math.round(state.unit === 'C' ? feelsC : cToF(feelsC));
+
+    var tempBlock =
+      '<div class="p-temp-row">' +
+      '<div><span class="p-temp">' + tempDisplay + '°</span><span class="p-temp-unit" id="unitToggle">' + state.unit + '</span></div>' +
+      '<div class="p-cond"><div class="p-cond-icon">' + wInfo[1] + '</div><div class="p-cond-label">' + wInfo[0] + '</div></div>' +
+      '</div>' +
+      (feelsDisplay !== null ? '<div class="p-feels">Feels like ' + feelsDisplay + '°' + state.unit + '</div>' : '');
+
+    var statGrid =
+      '<div class="stat-grid">' +
+      statCard('Humidity', humidity !== null && humidity !== undefined ? Math.round(humidity) + '%' : '—') +
+      statCard('Wind', wind !== null && wind !== undefined ? wind.toFixed(1) + ' km/h' : '—') +
+      statCard('Pressure', pressure !== null && pressure !== undefined ? Math.round(pressure) + ' hPa' : '—') +
+      statCard('Precip.', weather && weather.precipitation !== undefined ? weather.precipitation.toFixed(1) + ' mm' : '—') +
+      '</div>';
+
+    var aqiBlock = '';
+    if (aqiValue !== null) {
+      var pct = Math.min(100, (aqiValue / 300) * 100);
+      aqiBlock =
+        '<div class="aqi-block">' +
+        '<div class="aqi-head">' +
+        '<span class="aqi-label">Air Quality · US AQI</span>' +
+        '<div class="aqi-value-wrap"><span class="aqi-value">' + aqiValue + '</span>' +
+        '<span class="aqi-tag" style="color:' + aqiCat.color + ';border:1px solid ' + aqiCat.color + '55;background:' + aqiCat.color + '1a;">' + aqiCat.label + '</span></div>' +
+        '</div>' +
+        '<div class="aqi-bar-track"><div class="aqi-bar-fill" style="width:' + pct + '%; background:' + aqiCat.color + ';"></div></div>' +
+        '</div>';
+    } else {
+      aqiBlock =
+        '<div class="aqi-block">' +
+        '<div class="aqi-head"><span class="aqi-label">Air Quality · US AQI</span><span class="aqi-value" style="color:var(--mist);font-size:13px;">No data</span></div>' +
+        '</div>';
+    }
+
+    var footer =
+      '<div class="p-footer">Weather &amp; air quality via Open&#8209;Meteo. Location naming via BigDataCloud.</div>';
+
+    panelContentEl.innerHTML =
+      eyebrow + title + coords +
+      '<div class="p-divider"></div>' +
+      tempBlock +
+      statGrid +
+      aqiBlock +
+      footer;
+
+    var unitToggle = document.getElementById('unitToggle');
+    if (unitToggle) {
+      unitToggle.addEventListener('click', function () {
+        state.unit = state.unit === 'C' ? 'F' : 'C';
+        renderPanel(placeName, lat, lon, weather, aqi);
+      });
+    }
+
+    openPanel();
+  }
+
+  function statCard(label, value) {
+    return '<div class="stat-card"><div class="stat-label">' + label + '</div><div class="stat-value">' + value + '</div></div>';
+  }
+
+  function escapeHtml(str) {
+    var div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  /* ---------------------------------------------------------------------
+     Data fetching
+     --------------------------------------------------------------------- */
+
+  function fetchLocationData(lat, lon, presetName) {
+    showPanelLoading();
+
+    var weatherUrl = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat + '&longitude=' + lon +
+      '&current=temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,surface_pressure&timezone=auto';
+    var aqiUrl = 'https://air-quality-api.open-meteo.com/v1/air-quality?latitude=' + lat + '&longitude=' + lon +
+      '&current=us_aqi,pm2_5,pm10&timezone=auto';
+    var geoUrl = 'https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat + '&longitude=' + lon + '&localityLanguage=en';
+
+    var weatherPromise = fetch(weatherUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    var aqiPromise = fetch(aqiUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    var geoPromise = presetName ? Promise.resolve(null) : fetch(geoUrl).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+
+    Promise.all([weatherPromise, aqiPromise, geoPromise]).then(function (results) {
+      var weatherData = results[0];
+      var aqiData = results[1];
+      var geoData = results[2];
+
+      if (!weatherData && !aqiData && !presetName && !geoData) {
+        showPanelError(lat, lon);
+        return;
+      }
+
+      var name = presetName;
+      if (!name) {
+        if (geoData) {
+          var city = geoData.city || geoData.locality;
+          var country = geoData.countryName;
+          if (city && country) name = city + ', ' + country;
+          else if (country) name = country;
+          else name = 'Open Ocean';
+        } else {
+          name = 'Unnamed Point';
+        }
+      }
+
+      renderPanel(name, lat, lon, weatherData ? weatherData.current : null, aqiData ? aqiData.current : null);
+    });
+  }
+
+  /* ---------------------------------------------------------------------
+     Search
+     --------------------------------------------------------------------- */
+
+  var searchInput = document.getElementById('searchInput');
+  var searchResultsEl = document.getElementById('searchResults');
+  var searchDebounce = null;
+
+  searchInput.addEventListener('input', function () {
+    var q = searchInput.value.trim();
+    clearTimeout(searchDebounce);
+    if (q.length < 2) {
+      searchResultsEl.classList.add('hidden');
+      return;
+    }
+    searchDebounce = setTimeout(function () { runSearch(q); }, 320);
+  });
+
+  searchInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      searchResultsEl.classList.add('hidden');
+      searchInput.blur();
+    }
+  });
+
+  document.addEventListener('click', function (e) {
+    if (!searchResultsEl.contains(e.target) && e.target !== searchInput) {
+      searchResultsEl.classList.add('hidden');
+    }
+  });
+
+  function runSearch(query) {
+    var url = 'https://geocoding-api.open-meteo.com/v1/search?name=' + encodeURIComponent(query) + '&count=6&language=en&format=json';
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      var results = (data && data.results) || [];
+      renderSearchResults(results);
+    }).catch(function () {
+      searchResultsEl.innerHTML = '<div class="search-result-empty">Search unavailable right now.</div>';
+      searchResultsEl.classList.remove('hidden');
+    });
+  }
+
+  function renderSearchResults(results) {
+    if (results.length === 0) {
+      searchResultsEl.innerHTML = '<div class="search-result-empty">No matches found.</div>';
+      searchResultsEl.classList.remove('hidden');
+      return;
+    }
+    var html = '';
+    results.forEach(function (r, i) {
+      var label = r.name;
+      var region = [r.admin1, r.country].filter(Boolean).join(', ');
+      html += '<div class="search-result-item" data-idx="' + i + '"><span>' + escapeHtml(label) + '</span><span class="sr-country">' + escapeHtml(region) + '</span></div>';
+    });
+    searchResultsEl.innerHTML = html;
+    searchResultsEl.classList.remove('hidden');
+
+    Array.prototype.forEach.call(searchResultsEl.querySelectorAll('.search-result-item'), function (el) {
+      el.addEventListener('click', function () {
+        var idx = parseInt(el.getAttribute('data-idx'), 10);
+        var r = results[idx];
+        selectSearchResult(r);
+      });
+    });
+  }
+
+  function selectSearchResult(r) {
+    searchResultsEl.classList.add('hidden');
+    searchInput.value = r.name;
+    hideHint();
+
+    var localPoint = latLonToVector3(r.latitude, r.longitude, EARTH_RADIUS);
+    placeMarker(localPoint);
+    state.rotationTarget = frontRotationFor(localPoint);
+
+    var region = [r.admin1, r.country].filter(Boolean).join(', ');
+    var name = region ? r.name + ', ' + region : r.name;
+    fetchLocationData(r.latitude, r.longitude, name);
+  }
+
+})();
+
+</script>
+</body>
+</html>
